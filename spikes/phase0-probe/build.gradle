@@ -1,0 +1,5 @@
+// Throwaway Phase 0 spike. Pinned to the AGP already in the local Gradle cache so it builds offline;
+// the product build pins its own versions from docs/RESEARCH.md.
+plugins {
+    id "com.android.application" version "8.13.2" apply false
+}

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Aperture Probe (Phase 0)</string>
+    <string name="a11y_label">Aperture Probe overlay</string>
+    <string name="listener_label">Aperture Probe listener</string>
+    <string name="a11y_description">Phase 0 measurement spike. Draws a test ring over the camera cutout and logs which app is in the foreground. It cannot read window content.</string>
+</resources>
