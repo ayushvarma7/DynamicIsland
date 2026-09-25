@@ -43,6 +43,7 @@
         </activity>
         <activity android:name=".ui.CalibrationActivity" android:exported="false" />
         <activity android:name=".ui.AppsActivity" android:exported="false" />
+        <activity android:name=".ui.AdvancedActivity" android:exported="false" />
         <activity android:name=".ui.DeviceReportActivity" android:exported="false" />
         <activity
             android:name=".ui.ReplyActivity"

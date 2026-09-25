@@ -42,6 +42,7 @@ public final class MainActivity extends Activity {
     private static final int GREEN = 0xFF1E8E3E;
 
     private IslandSettings settings;
+    private SettingRows rows;
     private MaterialCardView banner;
     private TextView bannerTitle;
     private TextView bannerText;
@@ -89,6 +90,7 @@ public final class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         settings = ApertureApp.of(this).settings();
+        rows = new SettingRows(this, settings);
         LinearLayout page = Ui.page(this);
         TextView name = Ui.text(this, getString(dev.ayushvarma.aperture.R.string.app_name), R.style.TextAppearance_Material3_DisplaySmall);
         name.setTypeface(Fonts.medium());
@@ -117,9 +119,49 @@ public final class MainActivity extends Activity {
         Ui.button(demo, getString(dev.ayushvarma.aperture.R.string.main_demo_notification), v -> demoMessage());
         Ui.button(demo, getString(dev.ayushvarma.aperture.R.string.main_demo_timer), v -> demoTimer());
         Ui.button(demo, getString(dev.ayushvarma.aperture.R.string.main_demo_charging), v -> demoCharging());
-        Ui.button(page, getString(dev.ayushvarma.aperture.R.string.main_device_report),
-                v -> startActivity(new Intent(this, DeviceReportActivity.class)));
+        buildHelp(page);
     }
+
+    /** Help and feedback: answers to the questions people actually hit, and a direct line to the developer. */
+    private void buildHelp(LinearLayout page) {
+        Ui.title(page, getString(dev.ayushvarma.aperture.R.string.help_title));
+        LinearLayout faq = Ui.card(page);
+        int[][] items = {
+                {dev.ayushvarma.aperture.R.string.faq_stopped_q, dev.ayushvarma.aperture.R.string.faq_stopped_a},
+                {dev.ayushvarma.aperture.R.string.faq_double_q, dev.ayushvarma.aperture.R.string.faq_double_a},
+                {dev.ayushvarma.aperture.R.string.faq_nothing_q, dev.ayushvarma.aperture.R.string.faq_nothing_a},
+                {dev.ayushvarma.aperture.R.string.faq_protection_q, dev.ayushvarma.aperture.R.string.faq_protection_a},
+                {dev.ayushvarma.aperture.R.string.faq_privacy_q, dev.ayushvarma.aperture.R.string.faq_privacy_a},
+        };
+        for (int[] qa : items) {
+            TextView q = Ui.text(this, getString(qa[0]), R.style.TextAppearance_Material3_TitleSmall);
+            q.setPadding(0, Ui.dp(this, 10), 0, Ui.dp(this, 2));
+            faq.addView(q);
+            faq.addView(Ui.text(this, getString(qa[1]), R.style.TextAppearance_Material3_BodyMedium));
+        }
+        LinearLayout actions = Ui.card(page);
+        Ui.button(actions, getString(dev.ayushvarma.aperture.R.string.help_feedback), v -> sendFeedback());
+    }
+
+    /**
+     * Opens the user's email app addressed to the developer, with the device report and settings in the body so
+     * a bug report is actionable. Nothing is sent unless the user presses send (the app has no internet).
+     */
+    private void sendFeedback() {
+        String body = getString(dev.ayushvarma.aperture.R.string.feedback_body_intro) + "\n\n\n---\n"
+                + dev.ayushvarma.aperture.device.DeviceReport.build(this, settings) + "\nSettings\n" + settings.export();
+        Intent mail = new Intent(Intent.ACTION_SENDTO, android.net.Uri.parse("mailto:"))
+                .putExtra(Intent.EXTRA_EMAIL, new String[]{getString(dev.ayushvarma.aperture.R.string.feedback_email)})
+                .putExtra(Intent.EXTRA_SUBJECT, getString(dev.ayushvarma.aperture.R.string.feedback_subject))
+                .putExtra(Intent.EXTRA_TEXT, body);
+        try {
+            startActivity(mail);
+        } catch (android.content.ActivityNotFoundException e) {
+            startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain")
+                    .putExtra(Intent.EXTRA_TEXT, body), null));
+        }
+    }
+
 
     private void buildBanner(LinearLayout page) {
         banner = new MaterialCardView(this);
@@ -143,45 +185,26 @@ public final class MainActivity extends Activity {
     private void buildAppearance(LinearLayout page) {
         Ui.title(page, getString(dev.ayushvarma.aperture.R.string.main_appearance));
         LinearLayout look = Ui.card(page);
-        label(look, dev.ayushvarma.aperture.R.string.main_idle);
-        Ui.toggles(look, settings.idleStyle().ordinal(), labels(dev.ayushvarma.aperture.R.string.main_idle_ring,
-                dev.ayushvarma.aperture.R.string.main_idle_invisible, dev.ayushvarma.aperture.R.string.main_idle_hidden),
-                i -> settings.setEnum("idle", IslandSettings.IdleStyle.values()[i]));
-        label(look, dev.ayushvarma.aperture.R.string.main_body);
-        Ui.toggles(look, settings.body().ordinal(), labels(dev.ayushvarma.aperture.R.string.main_body_black,
-                dev.ayushvarma.aperture.R.string.main_body_tonal),
+        rows.label(look, dev.ayushvarma.aperture.R.string.main_body);
+        Ui.toggles(look, settings.body().ordinal(), rows.labels(dev.ayushvarma.aperture.R.string.main_body_black,
+                dev.ayushvarma.aperture.R.string.main_body_glass, dev.ayushvarma.aperture.R.string.main_body_clear,
+                dev.ayushvarma.aperture.R.string.main_body_artwork, dev.ayushvarma.aperture.R.string.main_body_tonal),
                 i -> settings.setEnum("body", IslandSettings.Body.values()[i]));
-        label(look, dev.ayushvarma.aperture.R.string.main_motion);
-        Ui.toggles(look, settings.motion().ordinal(), labels(dev.ayushvarma.aperture.R.string.main_motion_expressive,
-                dev.ayushvarma.aperture.R.string.main_motion_standard, dev.ayushvarma.aperture.R.string.main_motion_fluid),
-                i -> settings.setEnum("motion", IslandSettings.Motion.values()[i]));
-        Ui.button(look, getString(dev.ayushvarma.aperture.R.string.main_calibrate),
-                v -> startActivity(new Intent(this, CalibrationActivity.class)));
+        rows.hint(look, dev.ayushvarma.aperture.R.string.main_body_hint);
+        rows.toggle(look, dev.ayushvarma.aperture.R.string.main_artwork_accent, "artwork_accent", settings.artworkAccent());
     }
 
+    /** The few choices most people want; everything else lives on the Advanced page. */
     private void buildBehavior(LinearLayout page) {
         Ui.title(page, getString(dev.ayushvarma.aperture.R.string.main_behavior));
         LinearLayout b = Ui.card(page);
-        label(b, dev.ayushvarma.aperture.R.string.main_tap);
-        Ui.toggles(b, settings.tapAction().ordinal(), labels(dev.ayushvarma.aperture.R.string.main_tap_expand,
-                dev.ayushvarma.aperture.R.string.main_tap_open),
-                i -> settings.setEnum("tap_action", IslandSettings.TapAction.values()[i]));
-        slider(b, dev.ayushvarma.aperture.R.string.main_glance, "glance_seconds", settings.glanceSeconds(), 0, 30);
-        b.addView(Ui.text(this, getString(dev.ayushvarma.aperture.R.string.main_glance_hint), R.style.TextAppearance_Material3_BodySmall));
-        label(b, dev.ayushvarma.aperture.R.string.main_lock);
-        Ui.toggles(b, settings.lockScreen().ordinal(), labels(dev.ayushvarma.aperture.R.string.main_lock_brief,
-                dev.ayushvarma.aperture.R.string.main_lock_calls),
-                i -> settings.setEnum("lock_screen", IslandSettings.LockScreen.values()[i]));
-        toggle(b, dev.ayushvarma.aperture.R.string.main_show_media, "media", settings.showMedia());
-        toggle(b, dev.ayushvarma.aperture.R.string.main_show_notifications, "notifications", settings.showNotifications());
-        b.addView(Ui.text(this, getString(dev.ayushvarma.aperture.R.string.main_notifications_hint), R.style.TextAppearance_Material3_BodySmall));
-        toggle(b, dev.ayushvarma.aperture.R.string.main_show_system, "system_events", settings.showSystemEvents());
-        toggle(b, dev.ayushvarma.aperture.R.string.main_haptics, "haptics", settings.haptics());
-        slider(b, dev.ayushvarma.aperture.R.string.main_notification_time, "notif_seconds", settings.notificationSeconds(), 1, 12);
-        label(b, dev.ayushvarma.aperture.R.string.main_double_tap);
-        Ui.toggles(b, settings.doubleTap().ordinal(), labels(dev.ayushvarma.aperture.R.string.main_double_torch,
-                dev.ayushvarma.aperture.R.string.main_double_resume, dev.ayushvarma.aperture.R.string.main_double_nothing),
-                i -> settings.setEnum("double_tap", IslandSettings.DoubleTap.values()[i]));
+        rows.toggle(b, dev.ayushvarma.aperture.R.string.main_show_media, "media", settings.showMedia());
+        rows.toggle(b, dev.ayushvarma.aperture.R.string.main_show_notifications, "notifications", settings.showNotifications());
+        rows.hint(b, dev.ayushvarma.aperture.R.string.main_notifications_hint);
+        rows.toggle(b, dev.ayushvarma.aperture.R.string.main_hide_foreground, "hide_foreground", settings.hideInForeground());
+        rows.hint(b, dev.ayushvarma.aperture.R.string.main_hide_foreground_hint);
+        Ui.button(page, getString(dev.ayushvarma.aperture.R.string.advanced_open),
+                v -> startActivity(new Intent(this, AdvancedActivity.class)));
     }
 
     @Override
@@ -258,47 +281,10 @@ public final class MainActivity extends Activity {
         }
     }
 
-    private void label(LinearLayout parent, int text) {
-        TextView t = Ui.text(this, getString(text), R.style.TextAppearance_Material3_LabelLarge);
-        t.setPadding(0, Ui.dp(this, 10), 0, Ui.dp(this, 4));
-        parent.addView(t);
-    }
 
-    private void toggle(LinearLayout parent, int label, String key, boolean value) {
-        MaterialSwitch s = new MaterialSwitch(this);
-        s.setText(label);
-        s.setTypeface(Fonts.regular());
-        s.setChecked(value);
-        s.setOnCheckedChangeListener((b, checked) -> settings.setBoolean(key, checked));
-        parent.addView(s);
-    }
 
-    private void slider(LinearLayout parent, int label, String key, int value, int from, int to) {
-        TextView t = Ui.text(this, sliderText(label, key, value), R.style.TextAppearance_Material3_LabelLarge);
-        t.setPadding(0, Ui.dp(this, 10), 0, 0);
-        parent.addView(t);
-        Slider s = new Slider(this);
-        s.setValueFrom(from);
-        s.setValueTo(to);
-        s.setStepSize(1);
-        s.setValue(Math.max(from, Math.min(to, value)));
-        s.addOnChangeListener((sl, v, fromUser) -> {
-            settings.setInt(key, Math.round(v));
-            t.setText(sliderText(label, key, Math.round(v)));
-        });
-        parent.addView(s);
-    }
 
-    private String sliderText(int label, String key, int value) {
-        if (key.equals("glance_seconds") && value == 0) return getString(dev.ayushvarma.aperture.R.string.main_glance_never);
-        return getString(label, value);
-    }
 
-    private CharSequence[] labels(int... ids) {
-        CharSequence[] out = new CharSequence[ids.length];
-        for (int i = 0; i < ids.length; i++) out[i] = getString(ids[i]);
-        return out;
-    }
 
     private IslandHub hub() {
         return ApertureApp.of(this).hub();

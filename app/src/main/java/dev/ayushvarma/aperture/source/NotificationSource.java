@@ -160,6 +160,8 @@ public final class NotificationSource extends NotificationListenerService implem
         if (ranked && !ranking.matchesInterruptionFilter()) return; // DND
         if (ranked && ranking.getImportance() < NotificationManager.IMPORTANCE_DEFAULT) return;
         if (update && (n.flags & Notification.FLAG_ONLY_ALERT_ONCE) != 0) return;
+        if (settings.ignoreWhileScreenOff() && !getSystemService(android.os.PowerManager.class).isInteractive()) return;
+
         publishTransient(sbn, n, ranked ? ranking : null, now);
     }
 
@@ -186,6 +188,7 @@ public final class NotificationSource extends NotificationListenerService implem
             }
         }
         if (title == null && text == null) return;
+        if (settings.hideSensitive() && looksLikeOneTimeCode(title, text)) return;
         if (!p.redacted) p.replyAction = findReply(n);
         String id = "notif:" + sbn.getKey();
         keyToId.put(sbn.getKey(), id);
@@ -307,6 +310,19 @@ public final class NotificationSource extends NotificationListenerService implem
         d.setBounds(0, 0, size, size);
         d.draw(c);
         return b;
+    }
+
+    private static final java.util.regex.Pattern OTP_WORDS = java.util.regex.Pattern.compile(
+            "(?i)\\b(otp|code|passcode|verification|verify|one[- ]time|2fa|pin)\\b");
+    private static final java.util.regex.Pattern OTP_DIGITS = java.util.regex.Pattern.compile("(?<![\\d.,])\\d{4,8}(?![\\d.,])");
+
+    /**
+     * Android only tells system apps which notifications are sensitive, so recognise one-time codes the way a
+     * person would: a 4-8 digit number next to words like "code", "OTP" or "verification".
+     */
+    static boolean looksLikeOneTimeCode(CharSequence title, CharSequence text) {
+        String all = (title == null ? "" : title) + " " + (text == null ? "" : text);
+        return OTP_WORDS.matcher(all).find() && OTP_DIGITS.matcher(all).find();
     }
 
     static Notification.Action findReply(Notification n) {

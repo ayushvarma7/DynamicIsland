@@ -16,7 +16,8 @@ import dev.ayushvarma.aperture.core.geometry.Calibration;
 public final class IslandSettings {
     public enum IdleStyle { RING, INVISIBLE, HIDDEN }
     public enum Motion { EXPRESSIVE, STANDARD, FLUID }
-    public enum Body { BLACK, TONAL }
+    /** Expanded card style. The compact pill is always black so it blends with the camera. */
+    public enum Body { BLACK, GLASS, CLEAR, ARTWORK, TONAL }
     public enum DoubleTap { FLASHLIGHT, RESUME_MEDIA, NOTHING }
     /** What a tap on the pill does; long-press does the other. */
     public enum TapAction { EXPAND, OPEN_APP }
@@ -134,7 +135,8 @@ public final class IslandSettings {
     }
 
     public LockScreen lockScreen() {
-        return LockScreen.valueOf(prefs.getString("lock_screen", LockScreen.BRIEF.name()));
+        // Default: only calls on the lock screen. Android's own lock-screen player already shows music.
+        return LockScreen.valueOf(prefs.getString("lock_screen", LockScreen.CALLS_ONLY.name()));
     }
 
     /**
@@ -143,6 +145,49 @@ public final class IslandSettings {
      */
     public int glanceSeconds() {
         return prefs.getInt("glance_seconds", 8);
+    }
+
+    /** Tint progress, bars and the play button with a color picked from the album art. */
+    public boolean artworkAccent() {
+        return prefs.getBoolean("artwork_accent", true);
+    }
+
+    /** Hide an app's activity while that app is on screen (like iPhone). */
+    public boolean hideInForeground() {
+        return prefs.getBoolean("hide_foreground", true);
+    }
+
+    /** Seconds before an expanded card collapses on its own; 0 = stay open until dismissed. */
+    public int expandedSeconds() {
+        return prefs.getInt("expanded_seconds", 6);
+    }
+
+    public boolean collapseOnOutsideTouch() {
+        return prefs.getBoolean("collapse_outside", true);
+    }
+
+    /** Sideways swipe on the music pill skips tracks instead of switching activities. */
+    public boolean swipeChangesSong() {
+        return prefs.getBoolean("swipe_song", true);
+    }
+
+    /** Don't queue message pop-ups that arrive while the screen is off (they'd be stale when you look). */
+    public boolean ignoreWhileScreenOff() {
+        return prefs.getBoolean("ignore_screen_off", true);
+    }
+
+    /** Skip notifications Android marks as sensitive, such as one-time codes. */
+    public boolean hideSensitive() {
+        return prefs.getBoolean("hide_sensitive", true);
+    }
+
+    /** Every stored value, for "Share settings" and feedback. */
+    public String export() {
+        StringBuilder sb = new StringBuilder();
+        for (java.util.Map.Entry<String, ?> e : new java.util.TreeMap<>(prefs.getAll()).entrySet()) {
+            sb.append(e.getKey()).append(" = ").append(e.getValue()).append('\n');
+        }
+        return sb.toString();
     }
 
     public boolean showSystemEvents() {
