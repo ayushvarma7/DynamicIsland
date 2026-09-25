@@ -152,6 +152,35 @@ public final class IslandSettings {
         return prefs.getBoolean("artwork_accent", true);
     }
 
+    /** Theme of the Aperture app itself (the island always follows the system palette). */
+    public enum AppTheme { SYSTEM, LIGHT, DARK }
+
+    public AppTheme appTheme() {
+        return AppTheme.valueOf(prefs.getString("app_theme", AppTheme.SYSTEM.name()));
+    }
+
+    /**
+     * Applies the app theme through Android's per-app night mode (API 31), which the system persists and applies
+     * before our activities start, so there is no flash of the wrong theme.
+     */
+    public void setAppTheme(Context ctx, AppTheme theme) {
+        prefs.edit().putString("app_theme", theme.name()).apply();
+        int mode = theme == AppTheme.LIGHT ? android.app.UiModeManager.MODE_NIGHT_NO
+                : theme == AppTheme.DARK ? android.app.UiModeManager.MODE_NIGHT_YES
+                : android.app.UiModeManager.MODE_NIGHT_AUTO;
+        ctx.getSystemService(android.app.UiModeManager.class).setApplicationNightMode(mode);
+        changed();
+    }
+
+    /** True once the first-run introduction has been completed or skipped. */
+    public boolean onboarded() {
+        return prefs.getBoolean("onboarded", false);
+    }
+
+    public void setOnboarded(boolean done) {
+        prefs.edit().putBoolean("onboarded", done).apply();
+    }
+
     /** Master switch: pause the island without revoking any permission. */
     public boolean enabled() {
         return prefs.getBoolean("enabled", true);

@@ -53,6 +53,7 @@ public final class MainActivity extends Activity {
     private com.google.android.material.materialswitch.MaterialSwitch islandSwitch;
     private MaterialButton reviewSetup;
     private boolean setupExpanded;
+    private MaterialButton keepRunning;
     private LivePreview preview;
 
     /** One setup step: a status dot, a title, a line of status and an action button. */
@@ -94,6 +95,12 @@ public final class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         settings = ApertureApp.of(this).settings();
         rows = new SettingRows(this, settings);
+        if (!settings.onboarded()) {
+            // First run: the introduction owns the screen until it is finished or skipped.
+            startActivity(new Intent(this, OnboardingActivity.class));
+            finish();
+            return;
+        }
         LinearLayout page = Ui.page(this);
         TextView name = Ui.text(this, getString(dev.ayushvarma.aperture.R.string.app_name), R.style.TextAppearance_Material3_DisplaySmall);
         name.setTypeface(Fonts.medium());
@@ -114,7 +121,7 @@ public final class MainActivity extends Activity {
                 v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
         overlayStep.card.addView(Ui.text(this, getString(dev.ayushvarma.aperture.R.string.main_disclosure),
                 R.style.TextAppearance_Material3_BodySmall));
-        listenerStep = new Step(setup, dev.ayushvarma.aperture.R.string.main_listener_title, v -> openListenerSettings());
+        listenerStep = new Step(setup, dev.ayushvarma.aperture.R.string.main_listener_title, v -> Permissions.openListenerSettings(this));
         appsStep = new Step(setup, dev.ayushvarma.aperture.R.string.main_apps_title,
                 v -> startActivity(new Intent(this, AppsActivity.class)));
 
@@ -160,6 +167,12 @@ public final class MainActivity extends Activity {
             refreshSetup();
         });
         inner.addView(reviewSetup);
+        keepRunning = new MaterialButton(this, null, android.R.attr.borderlessButtonStyle);
+        keepRunning.setTypeface(Fonts.medium());
+        keepRunning.setAllCaps(false);
+        keepRunning.setText(dev.ayushvarma.aperture.R.string.main_keep_running);
+        keepRunning.setOnClickListener(v -> Permissions.requestKeepRunning(this));
+        inner.addView(keepRunning);
         banner.addView(inner);
         page.addView(banner);
     }
@@ -176,6 +189,10 @@ public final class MainActivity extends Activity {
                 i -> settings.setEnum("body", IslandSettings.Body.values()[i]));
         rows.hint(look, dev.ayushvarma.aperture.R.string.main_body_hint);
         rows.toggle(look, dev.ayushvarma.aperture.R.string.main_artwork_accent, "artwork_accent", settings.artworkAccent());
+        rows.label(look, dev.ayushvarma.aperture.R.string.main_app_theme);
+        Ui.chips(look, settings.appTheme().ordinal(), rows.labels(dev.ayushvarma.aperture.R.string.theme_system,
+                dev.ayushvarma.aperture.R.string.theme_light, dev.ayushvarma.aperture.R.string.theme_dark),
+                i -> settings.setAppTheme(this, IslandSettings.AppTheme.values()[i]));
         Ui.button(look, getString(dev.ayushvarma.aperture.R.string.look_try), v -> tryOnIsland());
     }
 
@@ -214,9 +231,8 @@ public final class MainActivity extends Activity {
 
     /** Recomputes every setup step and the banner from the live permission state. */
     private void refreshSetup() {
-        boolean overlay = isOverlayEnabled();
-        boolean listener = getSystemService(NotificationManager.class)
-                .isNotificationListenerAccessGranted(new ComponentName(this, NotificationSource.class));
+        boolean overlay = Permissions.overlay(this);
+        boolean listener = Permissions.listener(this);
         boolean apps = settings.appsChosen();
         overlayStep.set(overlay, overlay ? dev.ayushvarma.aperture.R.string.main_a11y_on : dev.ayushvarma.aperture.R.string.main_a11y_off,
                 overlay ? dev.ayushvarma.aperture.R.string.main_manage : dev.ayushvarma.aperture.R.string.main_grant);
@@ -242,6 +258,8 @@ public final class MainActivity extends Activity {
         setupSection.setVisibility(!complete || setupExpanded ? View.VISIBLE : View.GONE);
         islandSwitch.setVisibility(complete ? View.VISIBLE : View.GONE);
         reviewSetup.setVisibility(complete ? View.VISIBLE : View.GONE);
+        // Optional: without it a battery saver could stop Aperture after a restart.
+        keepRunning.setVisibility(complete && !Permissions.keepsRunning(this) ? View.VISIBLE : View.GONE);
         reviewSetup.setText(setupExpanded ? dev.ayushvarma.aperture.R.string.main_hide_setup
                 : dev.ayushvarma.aperture.R.string.main_review_setup);
         if (complete) {
@@ -249,7 +267,7 @@ public final class MainActivity extends Activity {
                     : dev.ayushvarma.aperture.R.string.banner_paused_text);
         }
         // Once both permissions are granted, go straight to the last step.
-        if (overlay && listener && !apps && !pickerOffered) {
+        if (overlay && listener && !apps && !pickerOffered && settings.onboarded()) {
             pickerOffered = true;
             startActivity(new Intent(this, AppsActivity.class));
         }
@@ -264,20 +282,6 @@ public final class MainActivity extends Activity {
         return n;
     }
 
-    /**
-     * Reads the enabled-services setting itself: AccessibilityManager's list can briefly omit a service while
-     * Android rebinds it (for example right after an app update), which would show a false red step.
-     */
-    private boolean isOverlayEnabled() {
-        ComponentName me = new ComponentName(this, IslandAccessibilityService.class);
-        String enabled = Settings.Secure.getString(getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-        if (enabled == null) return false;
-        for (String id : enabled.split(":")) {
-            ComponentName c = ComponentName.unflattenFromString(id);
-            if (me.equals(c)) return true;
-        }
-        return false;
-    }
 
     /** Rule S3: Android 17 Advanced Protection disables every non-tool accessibility service. */
     private boolean isAdvancedProtectionOn() {
@@ -290,16 +294,6 @@ public final class MainActivity extends Activity {
         }
     }
 
-    private void openListenerSettings() {
-        Intent detail = new Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS)
-                .putExtra(Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME,
-                        new ComponentName(this, NotificationSource.class).flattenToString());
-        try {
-            startActivity(detail);
-        } catch (android.content.ActivityNotFoundException e) {
-            startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS));
-        }
-    }
 
 
 

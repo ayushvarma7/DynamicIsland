@@ -51,7 +51,8 @@ import dev.ayushvarma.aperture.theme.IslandPalette;
 public final class IslandView extends View {
     /** What the island asks of whoever hosts it: the overlay service, or the live preview in settings. */
     public interface Host {
-        void onTouchRegion(Region region);
+        /** Applies the touchable region; returns false if it could not be applied yet (window not attached). */
+        boolean onTouchRegion(Region region);
 
         void dismissTransient();
 
@@ -150,6 +151,8 @@ public final class IslandView extends View {
     private float targetRadius;
     private final Region region = new Region();
     private final RectF lastRegion = new RectF();
+    /** Whether the last region really reached the window. Until then the whole window is touchable. */
+    private boolean regionApplied;
 
     public IslandView(Context ctx, Host host, Actions actions) {
         super(ctx);
@@ -435,16 +438,27 @@ public final class IslandView extends View {
         }
     }
 
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        // A region computed before attach never reached the window; send the current one now. Without this the
+        // whole (large) window would stay touchable and swallow taps at the top of the screen.
+        regionApplied = false;
+        updateRegion();
+    }
+
     /** Touchable area = island (and bubbles) + 6 dp slop; empty when nothing can be touched. */
     private void updateRegion() {
         currentBody(body);
         Content c = rendered;
         boolean touchable = c != null && c.presentation != Presentation.HIDDEN;
         if (!touchable) {
-            if (!lastRegion.isEmpty()) {
-                lastRegion.setEmpty();
+            if (!regionApplied || !lastRegion.isEmpty()) {
                 region.setEmpty();
-                host.onTouchRegion(region);
+                if (host.onTouchRegion(region)) {
+                    lastRegion.setEmpty();
+                    regionApplied = true;
+                }
             }
             return;
         }
@@ -457,13 +471,15 @@ public final class IslandView extends View {
         }
         tmp.inset(-slop, -slop);
         tmp.top = Math.max(0, tmp.top);
-        if (Math.abs(tmp.left - lastRegion.left) + Math.abs(tmp.right - lastRegion.right)
+        if (regionApplied && Math.abs(tmp.left - lastRegion.left) + Math.abs(tmp.right - lastRegion.right)
                 + Math.abs(tmp.top - lastRegion.top) + Math.abs(tmp.bottom - lastRegion.bottom) < 2f) {
             return;
         }
-        lastRegion.set(tmp);
         region.set(Math.round(tmp.left), Math.round(tmp.top), Math.round(tmp.right), Math.round(tmp.bottom));
-        host.onTouchRegion(region);
+        if (host.onTouchRegion(region)) {
+            lastRegion.set(tmp);
+            regionApplied = true;
+        }
     }
 
     private void currentBody(RectF out) {

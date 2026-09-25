@@ -201,7 +201,8 @@ final class LivePreview extends FrameLayout implements IslandSettings.Listener {
 
     private final class PreviewHost implements IslandView.Host {
         @Override
-        public void onTouchRegion(Region region) {
+        public boolean onTouchRegion(Region region) {
+            return true;
         }
 
         @Override

@@ -205,9 +205,11 @@ public final class IslandAccessibilityService extends AccessibilityService
     // ---- IslandView.Host -----------------------------------------------------------------------------
 
     @Override
-    public void onTouchRegion(Region region) {
+    public boolean onTouchRegion(Region region) {
         AttachedSurfaceControl sc = view.getRootSurfaceControl();
-        if (sc != null) sc.setTouchableRegion(region);
+        if (sc == null) return false;
+        sc.setTouchableRegion(region);
+        return true;
     }
 
     @Override

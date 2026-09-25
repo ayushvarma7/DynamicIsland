@@ -60,6 +60,12 @@ public final class HelpActivity extends Activity {
         fb.addView(Ui.text(this, getString(dev.ayushvarma.aperture.R.string.help_feedback_how), R.style.TextAppearance_Material3_BodyMedium));
         Ui.button(fb, getString(dev.ayushvarma.aperture.R.string.help_feedback), v -> sendFeedback());
 
+        Ui.button(fb, getString(dev.ayushvarma.aperture.R.string.help_replay), v -> {
+            settings.setOnboarded(false);
+            startActivity(new Intent(this, OnboardingActivity.class)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK));
+        });
+
         Ui.title(page, getString(dev.ayushvarma.aperture.R.string.help_leave));
         LinearLayout leave = Ui.card(page);
         leave.addView(Ui.text(this, getString(dev.ayushvarma.aperture.R.string.help_leave_text), R.style.TextAppearance_Material3_BodyMedium));
