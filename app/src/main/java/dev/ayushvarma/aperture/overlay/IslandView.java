@@ -317,8 +317,10 @@ public final class IslandView extends View {
             if (c.kind == ActivityKind.INCOMING_CALL) return new Content(Presentation.CARD, c);
             if (expanded) return new Content(Presentation.CARD, c);
             if (!haloed) return new Content(Presentation.COMPACT, c);
-            // Timed out. On the lock screen the island steps aside entirely; unlocked it rests as a halo.
-            if (!locked) return new Content(Presentation.HALO, c);
+            // Timed out. The halo is only for things that are live (playing music, a running timer, a call...);
+            // paused music, the lock screen, or the halo switched off all fall back to the plain camera ring.
+            boolean live = c.kind != ActivityKind.MEDIA || c.playing;
+            if (!locked && live && settings.showHalo()) return new Content(Presentation.HALO, c);
         }
         if (settings.idleStyle() == IslandSettings.IdleStyle.HIDDEN && !settings.calibrationPreview()) {
             return new Content(Presentation.HIDDEN, null);

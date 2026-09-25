@@ -181,6 +181,11 @@ public final class IslandSettings {
         prefs.edit().putBoolean("onboarded", done).apply();
     }
 
+    /** After the timeout, show live progress as a thin moving ring around the camera. */
+    public boolean showHalo() {
+        return prefs.getBoolean("show_halo", true);
+    }
+
     /** Master switch: pause the island without revoking any permission. */
     public boolean enabled() {
         return prefs.getBoolean("enabled", true);

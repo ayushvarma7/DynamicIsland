@@ -122,6 +122,8 @@
     <string name="faq_privacy_q">What does Aperture know about me?</string>
     <string name="faq_privacy_a">Only what is on your notifications and media sessions, while it shows them. It has no internet permission, stores nothing but its settings, and never reads your screen.</string>
     <string name="advanced_open">Advanced settings</string>
+    <string name="adv_halo">Live ring around the camera</string>
+    <string name="adv_halo_hint">After the pill shrinks, a thin ring around the camera keeps showing what\'s live: song progress, a timer\'s seconds, a delivery\'s progress. Green means a call is in progress. Paused music shows no ring. Tap the ring to open it again.</string>
     <string name="advanced_title">Advanced</string>
     <string name="advanced_hint">Fine-tuning for people who like to tinker. The defaults are chosen to be right for most people.</string>
     <string name="advanced_look">Look and position</string>

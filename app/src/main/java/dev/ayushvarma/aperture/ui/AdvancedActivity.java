@@ -52,6 +52,8 @@ public final class AdvancedActivity extends Activity {
         rows.slider(t, dev.ayushvarma.aperture.R.string.main_glance, dev.ayushvarma.aperture.R.string.main_glance_never,
                 "glance_seconds", s.glanceSeconds(), 0, 30);
         rows.hint(t, dev.ayushvarma.aperture.R.string.main_glance_hint);
+        rows.toggle(t, dev.ayushvarma.aperture.R.string.adv_halo, "show_halo", s.showHalo());
+        rows.hint(t, dev.ayushvarma.aperture.R.string.adv_halo_hint);
         rows.slider(t, dev.ayushvarma.aperture.R.string.main_expanded_time, dev.ayushvarma.aperture.R.string.main_expanded_never,
                 "expanded_seconds", s.expandedSeconds(), 0, 30);
         rows.toggle(t, dev.ayushvarma.aperture.R.string.main_collapse_outside, "collapse_outside", s.collapseOnOutsideTouch());
