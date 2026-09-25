@@ -157,7 +157,8 @@ final class IslandView extends View {
     private SpringAnimation spring(FloatValueHolder holder, boolean isSpatial) {
         SpringAnimation a = new SpringAnimation(holder);
         a.setSpring(new SpringForce());
-        a.setMinimumVisibleChange(DynamicAnimation.MIN_VISIBLE_CHANGE_PIXELS);
+        a.setMinimumVisibleChange(isSpatial ? DynamicAnimation.MIN_VISIBLE_CHANGE_PIXELS
+                : DynamicAnimation.MIN_VISIBLE_CHANGE_ALPHA);
         a.addUpdateListener((anim, value, velocity) -> onFrame());
         a.addEndListener((anim, canceled, value, velocity) -> onFrame());
         (isSpatial ? spatial : effects).add(a);
@@ -318,7 +319,9 @@ final class IslandView extends View {
             if (contentAlpha.getValue() <= 0.05f && progress >= 0.6f) {
                 rendered = pending;
                 pending = null;
-                contentAlphaAnim.animateToFinalPosition(1f);
+                // This can run inside the fade-out spring's own end callback, where restarting that spring
+                // is dropped (the new content then stayed invisible). Start the fade-in on the next frame.
+                postOnAnimation(() -> contentAlphaAnim.animateToFinalPosition(1f));
             }
         }
         updateRegion();
