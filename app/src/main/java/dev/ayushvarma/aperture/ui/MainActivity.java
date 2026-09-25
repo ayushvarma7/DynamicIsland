@@ -8,7 +8,6 @@ import android.content.res.Configuration;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
-import android.provider.Settings;
 import android.security.advancedprotection.AdvancedProtectionManager;
 import android.view.Gravity;
 import android.view.View;
@@ -118,7 +117,7 @@ public final class MainActivity extends Activity {
         LinearLayout setup = setupSection;
         Ui.title(setup, getString(dev.ayushvarma.aperture.R.string.main_setup));
         overlayStep = new Step(setup, dev.ayushvarma.aperture.R.string.main_a11y_title,
-                v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+                v -> Permissions.confirmOverlay(this));
         overlayStep.card.addView(Ui.text(this, getString(dev.ayushvarma.aperture.R.string.main_disclosure),
                 R.style.TextAppearance_Material3_BodySmall));
         listenerStep = new Step(setup, dev.ayushvarma.aperture.R.string.main_listener_title, v -> Permissions.openListenerSettings(this));
@@ -238,10 +237,12 @@ public final class MainActivity extends Activity {
                 overlay ? dev.ayushvarma.aperture.R.string.main_manage : dev.ayushvarma.aperture.R.string.main_grant);
         listenerStep.set(listener, listener ? dev.ayushvarma.aperture.R.string.main_listener_on : dev.ayushvarma.aperture.R.string.main_listener_off,
                 listener ? dev.ayushvarma.aperture.R.string.main_manage : dev.ayushvarma.aperture.R.string.main_grant);
-        appsStep.set(apps, apps ? dev.ayushvarma.aperture.R.string.main_apps_done : dev.ayushvarma.aperture.R.string.main_apps_todo,
+        appsStep.set(apps, dev.ayushvarma.aperture.R.string.main_apps_todo,
                 apps ? dev.ayushvarma.aperture.R.string.main_apps_change : dev.ayushvarma.aperture.R.string.main_apps_choose);
-        appsStep.status.setText(apps ? getString(dev.ayushvarma.aperture.R.string.main_apps_done, installedAllowed())
-                : getString(dev.ayushvarma.aperture.R.string.main_apps_todo));
+        if (apps) {
+            int n = installedAllowed();
+            appsStep.status.setText(getResources().getQuantityString(dev.ayushvarma.aperture.R.plurals.main_apps_done, n, n));
+        }
         int done = (overlay ? 1 : 0) + (listener ? 1 : 0) + (apps ? 1 : 0);
         boolean complete = done == 3;
         boolean night = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)

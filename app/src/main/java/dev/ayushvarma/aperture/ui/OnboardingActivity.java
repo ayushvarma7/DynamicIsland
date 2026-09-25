@@ -9,6 +9,8 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.view.animation.DecelerateInterpolator;
+import android.window.OnBackInvokedCallback;
+import android.window.OnBackInvokedDispatcher;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -92,7 +94,7 @@ public final class OnboardingActivity extends Activity {
                         dev.ayushvarma.aperture.R.string.ob_privacy_body, PRIVACY_ROWS, dev.ayushvarma.aperture.R.string.ob_next, null, null, false),
                 new Page(dev.ayushvarma.aperture.R.drawable.ic_layers, dev.ayushvarma.aperture.R.string.ob_overlay_title,
                         dev.ayushvarma.aperture.R.string.ob_overlay_body, null, dev.ayushvarma.aperture.R.string.ob_overlay_action,
-                        () -> Permissions.openOverlaySettings(this), () -> Permissions.overlay(this), false),
+                        () -> Permissions.confirmOverlay(this), () -> Permissions.overlay(this), false),
                 new Page(dev.ayushvarma.aperture.R.drawable.ic_bell, dev.ayushvarma.aperture.R.string.ob_listener_title,
                         dev.ayushvarma.aperture.R.string.ob_listener_body, null, dev.ayushvarma.aperture.R.string.ob_listener_action,
                         () -> Permissions.openListenerSettings(this), () -> Permissions.listener(this), false),
@@ -136,10 +138,19 @@ public final class OnboardingActivity extends Activity {
         }
     }
 
-    @Override
-    public void onBackPressed() {
-        if (index > 0) go(index - 1);
-        else super.onBackPressed();
+    /** Back steps to the previous page; registered only past the first page, so back on Welcome leaves as usual. */
+    private final OnBackInvokedCallback backToPrevious = () -> go(index - 1);
+    private boolean backRegistered;
+
+    private void updateBack() {
+        boolean want = index > 0;
+        if (want == backRegistered) return;
+        if (want) {
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, backToPrevious);
+        } else {
+            getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(backToPrevious);
+        }
+        backRegistered = want;
     }
 
     private void buildShell() {
@@ -225,6 +236,7 @@ public final class OnboardingActivity extends Activity {
     /** Slides the old page out and the new one in (40 dp, 250 ms, decelerating). */
     private void show(int target, int direction) {
         index = target;
+        updateBack();
         View old = stage.getChildCount() > 0 ? stage.getChildAt(0) : null;
         View page = buildPage(pages[target]);
         float shift = Ui.dp(this, 40) * direction;

@@ -1,5 +1,6 @@
 package dev.ayushvarma.aperture.ui;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.LinearGradient;
@@ -30,6 +31,7 @@ import dev.ayushvarma.aperture.theme.IslandPalette;
  * this phone, scaled down, so it always shows the chosen style, colors and motion (no video to go stale):
  * resting ring, then a song arrives, expands, collapses, and ends.
  */
+@SuppressLint("ViewConstructor") // Built in code only, with its settings; never inflated from XML.
 final class LivePreview extends FrameLayout implements IslandSettings.Listener {
     // How long each state lasts: pill, expanded, pill again, resting ring, pause before the loop restarts.
     private static final long[] STEPS_MS = {2500, 4000, 1800, 1400, 600};
@@ -74,6 +76,10 @@ final class LivePreview extends FrameLayout implements IslandSettings.Listener {
     /** Mock phone top: wallpaper gradient from the system palette, a status bar, the camera hole. */
     private final class Stage extends FrameLayout {
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private LinearGradient wallpaper;
+        private int wallpaperKey;
+        private String time = "";
+        private long timeMinute = -1;
 
         Stage(Context c) {
             super(c);
@@ -84,16 +90,25 @@ final class LivePreview extends FrameLayout implements IslandSettings.Listener {
         protected void onDraw(Canvas c) {
             int w = getWidth();
             int h = getHeight();
-            paint.setShader(new LinearGradient(0, 0, w, h,
-                    getContext().getColor(android.R.color.system_accent1_600),
-                    getContext().getColor(android.R.color.system_accent3_800), Shader.TileMode.CLAMP));
+            int from = getContext().getColor(android.R.color.system_accent1_600);
+            int to = getContext().getColor(android.R.color.system_accent3_800);
+            int key = ((w * 31 + h) * 31 + from) * 31 + to;
+            if (wallpaper == null || key != wallpaperKey) {
+                wallpaper = new LinearGradient(0, 0, w, h, from, to, Shader.TileMode.CLAMP);
+                wallpaperKey = key;
+            }
+            paint.setShader(wallpaper);
             c.drawRect(0, 0, w, h, paint);
             paint.setShader(null);
             if (geometry == null) return;
             paint.setColor(0xFFFFFFFF);
             paint.setTextSize(geometry.compactHeight * 0.42f);
             paint.setTypeface(dev.ayushvarma.aperture.theme.Fonts.medium());
-            String time = DateFormat.getTimeFormat(getContext()).format(new java.util.Date());
+            long minute = System.currentTimeMillis() / 60_000L;
+            if (minute != timeMinute) {
+                time = DateFormat.getTimeFormat(getContext()).format(minute * 60_000L);
+                timeMinute = minute;
+            }
             c.drawText(time, geometry.expandedLeft + geometry.innerPadding, geometry.centerY + paint.getTextSize() * 0.35f, paint);
             float x = w - geometry.expandedLeft - geometry.innerPadding;
             float barH = geometry.compactHeight * 0.3f;

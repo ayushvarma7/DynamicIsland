@@ -5,9 +5,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.BatteryManager;
+import android.os.VibrationAttributes;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
-import android.provider.Settings;
 
 import dev.ayushvarma.aperture.ApertureApp;
 import dev.ayushvarma.aperture.R;
@@ -80,16 +80,19 @@ public final class SystemEvents extends BroadcastReceiver {
         return bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
     }
 
-    /** Section 7.6: composition primitives when supported and touch feedback is on (rule H1). */
+    /**
+     * Section 7.6: composition primitives when supported (rule H1). Touch usage makes Android apply the user's
+     * touch-feedback setting, including off.
+     */
     private void vibrate(int primitive) {
         if (!ApertureApp.of(ctx).settings().haptics()) return;
-        if (Settings.System.getInt(ctx.getContentResolver(), Settings.System.HAPTIC_FEEDBACK_ENABLED, 1) == 0) return;
         Vibrator v = ctx.getSystemService(Vibrator.class);
         if (v == null || !v.hasVibrator()) return;
+        VibrationAttributes touch = VibrationAttributes.createForUsage(VibrationAttributes.USAGE_TOUCH);
         if (v.areAllPrimitivesSupported(primitive)) {
-            v.vibrate(VibrationEffect.startComposition().addPrimitive(primitive).compose());
+            v.vibrate(VibrationEffect.startComposition().addPrimitive(primitive).compose(), touch);
         } else {
-            v.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_HEAVY_CLICK));
+            v.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_HEAVY_CLICK), touch);
         }
     }
 }

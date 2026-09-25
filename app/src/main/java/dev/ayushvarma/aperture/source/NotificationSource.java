@@ -13,6 +13,7 @@ import android.graphics.Canvas;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.Icon;
+import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.service.notification.NotificationListenerService;
@@ -139,7 +140,8 @@ public final class NotificationSource extends NotificationListenerService implem
             return;
         }
 
-        boolean promoted = (n.flags & Notification.FLAG_PROMOTED_ONGOING) != 0 || template.endsWith("ProgressStyle");
+        boolean promoted = (Build.VERSION.SDK_INT >= 36 && (n.flags & Notification.FLAG_PROMOTED_ONGOING) != 0)
+                || template.endsWith("ProgressStyle");
         boolean chronometer = ex.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER);
         boolean countDown = ex.getBoolean(Notification.EXTRA_CHRONOMETER_COUNT_DOWN);
         int max = ex.getInt(Notification.EXTRA_PROGRESS_MAX, 0);

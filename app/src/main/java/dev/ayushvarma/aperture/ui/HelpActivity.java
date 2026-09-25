@@ -40,7 +40,7 @@ public final class HelpActivity extends Activity {
         Ui.title(page, getString(dev.ayushvarma.aperture.R.string.help_common));
         LinearLayout faq = Ui.card(page);
         for (int[] qa : FAQ) {
-            TextView q = Ui.text(this, "▸  " + getString(qa[0]), R.style.TextAppearance_Material3_TitleSmall);
+            TextView q = Ui.text(this, getString(dev.ayushvarma.aperture.R.string.help_faq_row, "▸", getString(qa[0])), R.style.TextAppearance_Material3_TitleSmall);
             int pad = Ui.dp(this, 12);
             q.setPadding(0, pad, 0, pad);
             TextView a = Ui.text(this, getString(qa[1]), R.style.TextAppearance_Material3_BodyMedium);
@@ -49,7 +49,7 @@ public final class HelpActivity extends Activity {
             q.setOnClickListener(v -> {
                 boolean open = a.getVisibility() != View.VISIBLE;
                 a.setVisibility(open ? View.VISIBLE : View.GONE);
-                q.setText((open ? "▾  " : "▸  ") + getString(qa[0]));
+                q.setText(getString(dev.ayushvarma.aperture.R.string.help_faq_row, open ? "▾" : "▸", getString(qa[0])));
             });
             faq.addView(q);
             faq.addView(a);
@@ -64,6 +64,15 @@ public final class HelpActivity extends Activity {
             settings.setOnboarded(false);
             startActivity(new Intent(this, OnboardingActivity.class)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK));
+        });
+        // Opens in the browser; Aperture itself has no internet permission.
+        Ui.button(fb, getString(dev.ayushvarma.aperture.R.string.help_privacy), v -> {
+            try {
+                startActivity(new Intent(Intent.ACTION_VIEW,
+                        android.net.Uri.parse(getString(dev.ayushvarma.aperture.R.string.privacy_url))));
+            } catch (android.content.ActivityNotFoundException ignored) {
+                // No browser installed; nothing to open.
+            }
         });
 
         Ui.title(page, getString(dev.ayushvarma.aperture.R.string.help_leave));

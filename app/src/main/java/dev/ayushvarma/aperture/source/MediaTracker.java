@@ -14,6 +14,8 @@ import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 
+import androidx.core.content.res.ResourcesCompat;
+
 import java.io.InputStream;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -220,7 +222,7 @@ final class MediaTracker {
     private Drawable packageDrawable(String pkg, int resId) {
         if (resId == 0) return null;
         try {
-            return ctx.getPackageManager().getResourcesForApplication(pkg).getDrawable(resId, null);
+            return ResourcesCompat.getDrawable(ctx.getPackageManager().getResourcesForApplication(pkg), resId, null);
         } catch (Exception e) {
             return null;
         }

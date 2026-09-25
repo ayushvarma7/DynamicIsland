@@ -80,6 +80,8 @@ public final class IslandAccessibilityService extends AccessibilityService
                         | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
                         | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
                 PixelFormat.TRANSLUCENT);
+        // Physical placement: x and y are display pixels measured from the left edge, whatever the text direction.
+        //noinspection RtlHardcoded
         lp.gravity = Gravity.TOP | Gravity.LEFT;
         lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
         lp.setFitInsetsTypes(0);

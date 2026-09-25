@@ -4,6 +4,7 @@ import android.app.ActivityOptions;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.os.Build;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraManager;
@@ -57,12 +58,19 @@ public final class Actions {
         if (pi == null) return false;
         try {
             ActivityOptions opts = ActivityOptions.makeBasic()
-                    .setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED);
+                    .setPendingIntentBackgroundActivityStartMode(backgroundStartMode());
             pi.send(ctx, 0, null, null, null, null, opts.toBundle());
             return true;
         } catch (PendingIntent.CanceledException e) {
             return false;
         }
+    }
+
+    /** ALLOW_ALWAYS replaced ALLOWED in Android 16; both mean the same for a PendingIntent we send. */
+    @SuppressWarnings("deprecation")
+    private static int backgroundStartMode() {
+        return Build.VERSION.SDK_INT >= 36 ? ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS
+                : ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED;
     }
 
     void startActivity(Intent intent) {

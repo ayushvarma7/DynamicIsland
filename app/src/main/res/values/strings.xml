@@ -25,7 +25,6 @@
     <string name="main_manage">Manage</string>
     <string name="main_apps_title">3. Apps that can use the island</string>
     <string name="main_apps_todo">Not chosen yet. Pick the apps you want on the island.</string>
-    <string name="main_apps_done">%1$d apps allowed.</string>
     <string name="main_apps_choose">Choose apps</string>
     <string name="main_apps_change">Change</string>
     <string name="main_tap">Tapping the island</string>
@@ -80,7 +79,7 @@
     <string name="ob_privacy_leave">Pause or uninstall any time, in one tap.</string>
     <string name="ob_overlay_title">Let the island draw</string>
     <string name="ob_overlay_body">Only an accessibility service can draw over the status bar, where your camera is. Aperture uses it for that alone, plus knowing which app is in front so the island can step aside. It can\'t read your screen.\n\nIn the next screen, open Aperture island and switch it on.</string>
-    <string name="ob_overlay_action">Open Accessibility settings</string>
+    <string name="ob_overlay_action">Continue</string>
     <string name="ob_listener_title">See what\'s playing</string>
     <string name="ob_listener_body">Notification access is how Aperture learns about your music, timers, deliveries and calls. It only looks at them to show them, and keeps nothing.\n\nIn the next screen, allow Aperture media and notifications.</string>
     <string name="ob_listener_action">Allow notification access</string>
@@ -88,8 +87,8 @@
     <string name="ob_apps_body">Choose which apps can appear on the island. The usual ones, like YouTube Music, Spotify, WhatsApp and Clock, are already on.</string>
     <string name="ob_apps_action">Choose apps</string>
     <string name="ob_restart_title">Stay on after restart</string>
-    <string name="ob_restart_body">Android brings Aperture back by itself when your phone restarts. So that a battery saver never stops it, allow it to run in the background. You can change this any time in Settings.</string>
-    <string name="ob_restart_action">Allow</string>
+    <string name="ob_restart_body">Android brings Aperture back by itself when your phone restarts. So that a battery saver never stops it, let it run in the background: in the next screen, tap App battery usage, then Allow background usage, and choose Unrestricted. You can change this any time.</string>
+    <string name="ob_restart_action">Open App info</string>
     <string name="ob_done_title">You\'re all set</string>
     <string name="ob_done_body">Play some music, then leave the app. The island will be waiting around your camera.</string>
     <string name="help_open">Help, feedback and uninstall</string>
@@ -144,7 +143,6 @@
     <string name="main_listener_off">Off. Allow "Aperture media and notifications".</string>
     <string name="main_aapm">Advanced Protection is on. Android blocks accessibility services that are not accessibility tools, so the island cannot draw until you turn Advanced Protection off. This is a system rule and no island app can work around it.</string>
     <string name="main_disclosure">What the accessibility permission is used for: drawing the island over the status bar, and knowing which app is in front so the island hides in camera apps. Aperture cannot read screen content, has no internet permission, and keeps nothing off your phone.</string>
-    <string name="main_open_settings">Open settings</string>
     <string name="main_appearance">Look</string>
     <string name="main_idle">When idle</string>
     <string name="main_idle_ring">Black ring</string>
@@ -200,4 +198,14 @@
     <string name="reply_hint">Reply</string>
     <string name="reply_send">Send</string>
     <string name="reply_unavailable">This notification can no longer be replied to.</string>
+    <plurals name="main_apps_done">
+        <item quantity="one">%1$d app allowed.</item>
+        <item quantity="other">%1$d apps allowed.</item>
+    </plurals>
+    <string name="a11y_consent_title">How Aperture uses Accessibility</string>
+    <string name="a11y_consent_body">Aperture uses the Accessibility API for two things only:\n\n• To draw the island above the status bar, around your camera. Only an accessibility service can draw there.\n• To know which app is in front, so the island can step aside in camera apps and while you are in the app it is showing.\n\nAperture does not read, collect or store what is on your screen or what you type. It has no internet permission, and nothing is shared with anyone.\n\nTap Agree, then turn on Aperture island in the next screen.</string>
+    <string name="a11y_consent_agree">Agree</string>
+    <string name="help_faq_row" translatable="false">%1$s  %2$s</string>
+    <string name="help_privacy">Privacy policy</string>
+    <string name="privacy_url" translatable="false">https://github.com/ayushvarma7/DynamicIsland/blob/main/PRIVACY.md</string>
 </resources>
