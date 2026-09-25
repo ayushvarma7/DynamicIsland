@@ -40,6 +40,27 @@ public final class IslandHub {
         run(() -> engine.postTransient(a, durationMs));
     }
 
+    /** Asks the island to open the expanded view of an activity (used by "Try it out"). */
+    public interface ExpandListener {
+        void onExpandRequest(String activityId);
+    }
+
+    private final java.util.List<ExpandListener> expandListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    public void addExpandListener(ExpandListener l) {
+        expandListeners.add(l);
+    }
+
+    public void removeExpandListener(ExpandListener l) {
+        expandListeners.remove(l);
+    }
+
+    public void requestExpand(String activityId) {
+        run(() -> {
+            for (ExpandListener l : expandListeners) l.onExpandRequest(activityId);
+        });
+    }
+
     public void addListener(IslandEngine.Listener l) {
         engine.addListener(l);
     }

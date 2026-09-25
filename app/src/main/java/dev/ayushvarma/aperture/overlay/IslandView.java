@@ -48,8 +48,9 @@ import dev.ayushvarma.aperture.theme.IslandPalette;
  * pill never disappears or flashes.
  */
 @SuppressLint("ViewConstructor")
-final class IslandView extends View {
-    interface Host {
+public final class IslandView extends View {
+    /** What the island asks of whoever hosts it: the overlay service, or the live preview in settings. */
+    public interface Host {
         void onTouchRegion(Region region);
 
         void dismissTransient();
@@ -150,7 +151,7 @@ final class IslandView extends View {
     private final Region region = new Region();
     private final RectF lastRegion = new RectF();
 
-    IslandView(Context ctx, Host host, Actions actions) {
+    public IslandView(Context ctx, Host host, Actions actions) {
         super(ctx);
         this.host = host;
         this.actions = actions;
@@ -180,7 +181,7 @@ final class IslandView extends View {
 
     // ---- Inputs ------------------------------------------------------------------------------------
 
-    void configure(IslandGeometry geometry, IslandPalette palette, IslandSettings settings) {
+    public void configure(IslandGeometry geometry, IslandPalette palette, IslandSettings settings) {
         this.g = geometry;
         this.palette = palette;
         this.settings = settings;
@@ -188,7 +189,7 @@ final class IslandView extends View {
         retarget();
     }
 
-    void setState(IslandState s) {
+    public void setState(IslandState s) {
         IslandActivity oldCompact = state.compact;
         state = s;
         if (expanded && (s.compact == null || oldCompact == null || !s.compact.id.equals(oldCompact.id))) {
@@ -204,7 +205,7 @@ final class IslandView extends View {
         retarget();
     }
 
-    void setExpanded(boolean e) {
+    public void setExpanded(boolean e) {
         if (expanded == e) return;
         expanded = e;
         if (!e) wake();
@@ -903,10 +904,9 @@ final class IslandView extends View {
             scrubLeft = l;
             scrubSpan = r - l;
         }
-        if (mc == null) return;
-
-        // Controls: [like]  prev  PLAY  next  [output], evenly weighted around the center.
-        MediaController.TransportControls tc = mc.getTransportControls();
+        // Controls: [like]  prev  PLAY  next  [output], evenly weighted around the center. Without a session
+        // (the settings preview) they are drawn but do nothing.
+        MediaController.TransportControls tc = mc == null ? null : mc.getTransportControls();
         float cy = body.bottom - pad - dp(28);
         float mid = (l + r) / 2f;
         float step = dp(72);
@@ -915,24 +915,24 @@ final class IslandView extends View {
         fill.setColor(0xFFFFFFFF);
         glyphs.next(c, mid - step, cy, glyph, fill, false);
         tmp.set(mid - step - hit / 2, cy - hit / 2, mid - step + hit / 2, cy + hit / 2);
-        addHit(tmp, tc::skipToPrevious);
+        addHit(tmp, tc == null ? null : tc::skipToPrevious);
         fill.setColor(accent);
         c.drawCircle(mid, cy, dp(28), fill);
         fill.setColor(dev.ayushvarma.aperture.theme.ArtColors.onAccent(accent));
         if (a.playing) glyphs.pause(c, mid, cy, dp(24), fill);
         else glyphs.play(c, mid + dp(2), cy, dp(26), fill);
         tmp.set(mid - dp(28), cy - dp(28), mid + dp(28), cy + dp(28));
-        addHit(tmp, a.playing ? tc::pause : tc::play);
+        addHit(tmp, tc == null ? null : a.playing ? tc::pause : tc::play);
         fill.setColor(0xFFFFFFFF);
         glyphs.next(c, mid + step, cy, glyph, fill, true);
         tmp.set(mid + step - hit / 2, cy - hit / 2, mid + step + hit / 2, cy + hit / 2);
-        addHit(tmp, tc::skipToNext);
+        addHit(tmp, tc == null ? null : tc::skipToNext);
 
         fill.setColor(0xB3FFFFFF);
         glyphs.cast(c, r - hit / 2, cy, dp(22), fill);
         tmp.set(r - hit, cy - hit / 2, r, cy + hit / 2);
-        addHit(tmp, () -> actions.outputSwitcher(mc.getPackageName()));
-        if (p.customAction != null && p.customActionIcon != null) {
+        addHit(tmp, mc == null ? null : () -> actions.outputSwitcher(mc.getPackageName()));
+        if (tc != null && p.customAction != null && p.customActionIcon != null) {
             Drawable d = p.customActionIcon.mutate();
             d.setTint(0xB3FFFFFF);
             drawDrawable(c, d, l + hit / 2, cy, dp(24));

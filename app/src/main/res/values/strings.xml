@@ -121,6 +121,9 @@
     <string name="demo_sender">Aperture</string>
     <string name="demo_message">This is how a message from WhatsApp will look. Swipe up to dismiss.</string>
     <string name="demo_timer">Timer</string>
+    <string name="demo_song_title">Golden Hour</string>
+    <string name="demo_song_artist">Aperture Sessions</string>
+    <string name="look_try">Try it out on the island</string>
 
     <string name="calibrate_title">Calibrate</string>
     <string name="calibrate_hint">The outline shows the camera cutout Android reports. Nudge the ring until it sits evenly around your camera. Changes apply live.</string>

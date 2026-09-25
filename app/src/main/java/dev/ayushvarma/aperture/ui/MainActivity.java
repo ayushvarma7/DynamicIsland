@@ -51,6 +51,7 @@ public final class MainActivity extends Activity {
     private Step appsStep;
     private TextView aapm;
     private boolean pickerOffered;
+    private LivePreview preview;
 
     /** One setup step: a status dot, a title, a line of status and an action button. */
     private final class Step {
@@ -185,6 +186,8 @@ public final class MainActivity extends Activity {
     private void buildAppearance(LinearLayout page) {
         Ui.title(page, getString(dev.ayushvarma.aperture.R.string.main_appearance));
         LinearLayout look = Ui.card(page);
+        preview = new LivePreview(this, settings);
+        look.addView(preview);
         rows.label(look, dev.ayushvarma.aperture.R.string.main_body);
         Ui.chips(look, settings.body().ordinal(), rows.labels(dev.ayushvarma.aperture.R.string.main_body_black,
                 dev.ayushvarma.aperture.R.string.main_body_glass, dev.ayushvarma.aperture.R.string.main_body_clear,
@@ -192,6 +195,20 @@ public final class MainActivity extends Activity {
                 i -> settings.setEnum("body", IslandSettings.Body.values()[i]));
         rows.hint(look, dev.ayushvarma.aperture.R.string.main_body_hint);
         rows.toggle(look, dev.ayushvarma.aperture.R.string.main_artwork_accent, "artwork_accent", settings.artworkAccent());
+        Ui.button(look, getString(dev.ayushvarma.aperture.R.string.look_try), v -> tryOnIsland());
+    }
+
+    /** Plays the sample song on the real island and opens the expanded player in the chosen style. */
+    private void tryOnIsland() {
+        hub().upsert(DemoContent.song(this));
+        hub().requestExpand(DemoContent.SONG_ID);
+        getWindow().getDecorView().postDelayed(() -> hub().remove(DemoContent.SONG_ID), 10_000);
+    }
+
+    @Override
+    protected void onPause() {
+        preview.setRunning(false);
+        super.onPause();
     }
 
     /** The few choices most people want; everything else lives on the Advanced page. */
@@ -210,6 +227,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        preview.setRunning(true);
         boolean overlay = isOverlayEnabled();
         boolean listener = getSystemService(NotificationManager.class)
                 .isNotificationListenerAccessGranted(new ComponentName(this, NotificationSource.class));

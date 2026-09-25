@@ -16,7 +16,7 @@ import android.view.KeyEvent;
 import android.view.View;
 
 /** Everything the island does to the outside world. Runs in the accessibility service's context. */
-final class Actions {
+public final class Actions {
     private final Context ctx;
     private String torchId;
     private boolean torchOn;
@@ -28,7 +28,7 @@ final class Actions {
         }
     };
 
-    Actions(Context ctx) {
+    public Actions(Context ctx) {
         this.ctx = ctx;
         CameraManager cm = ctx.getSystemService(CameraManager.class);
         try {
@@ -45,7 +45,7 @@ final class Actions {
         if (torchId != null) cm.registerTorchCallback(torchCallback, new Handler(Looper.getMainLooper()));
     }
 
-    void release() {
+    public void release() {
         if (torchId != null) ctx.getSystemService(CameraManager.class).unregisterTorchCallback(torchCallback);
     }
 

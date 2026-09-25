@@ -39,7 +39,7 @@ import dev.ayushvarma.aperture.ui.ReplyActivity;
  * Reads only window-state events (foreground package) and never window content.
  */
 public final class IslandAccessibilityService extends AccessibilityService
-        implements IslandView.Host, IslandEngine.Listener, IslandSettings.Listener {
+        implements IslandView.Host, IslandEngine.Listener, IslandSettings.Listener, IslandHub.ExpandListener {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Set<String> cameraPackages = new HashSet<>();
     private final Set<String> inputMethods = new HashSet<>();
@@ -92,6 +92,7 @@ public final class IslandAccessibilityService extends AccessibilityService
         refresh();
         wm.addView(view, lp);
         hub.addListener(this);
+        hub.addExpandListener(this);
         settings.addListener(this);
         view.setState(hub.state());
         systemEvents = new SystemEvents(this);
@@ -106,7 +107,10 @@ public final class IslandAccessibilityService extends AccessibilityService
     @Override
     public void onDestroy() {
         main.removeCallbacksAndMessages(null);
-        if (hub != null) hub.removeListener(this);
+        if (hub != null) {
+            hub.removeListener(this);
+            hub.removeExpandListener(this);
+        }
         if (settings != null) settings.removeListener(this);
         if (systemEvents != null) {
             systemEvents.unregister();
@@ -150,6 +154,12 @@ public final class IslandAccessibilityService extends AccessibilityService
     public void onStateChanged(IslandState state) {
         view.setState(state);
         scheduleCollapse();
+    }
+
+    @Override
+    public void onExpandRequest(String activityId) {
+        IslandState s = hub.state();
+        if (s.compact != null && s.compact.id.equals(activityId)) setExpanded(true);
     }
 
     @Override
