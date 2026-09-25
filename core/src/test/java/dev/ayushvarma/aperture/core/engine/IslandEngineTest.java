@@ -146,6 +146,20 @@ public class IslandEngineTest {
         assertEquals(before + 1, events.size());
     }
 
+    @Test
+    public void removeIfClearsPersistentQueuedAndShowing() {
+        engine.upsert(media("music", true));
+        engine.upsert(act("dl", ActivityKind.DOWNLOAD));
+        engine.postTransient(act("n1", ActivityKind.NOTIFICATION), 4000);
+        engine.postTransient(act("n2", ActivityKind.NOTIFICATION), 4000);
+        engine.removeIf(a -> !a.id.equals("dl"));
+        assertEquals("dl", engine.state().compact.id);
+        assertNull(engine.state().transientActivity);
+        now += 5000;
+        engine.tick();
+        assertNull(engine.state().transientActivity);
+    }
+
     @Test(expected = IllegalArgumentException.class)
     public void transientKindsCannotBePersistent() {
         engine.upsert(act("n", ActivityKind.NOTIFICATION));

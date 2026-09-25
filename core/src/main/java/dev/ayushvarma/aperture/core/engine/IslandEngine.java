@@ -9,6 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.LongSupplier;
+import java.util.function.Predicate;
 
 /**
  * Section 6.3 arbitration. Not thread-safe: the app drives it from the main thread only.
@@ -85,6 +86,17 @@ public final class IslandEngine {
             }
         }
         if (id.equals(pinnedId)) pinnedId = null;
+        if (changed) recompute();
+    }
+
+    /** Removes every persistent, queued and showing activity matching the filter (e.g. an app turned off). */
+    public void removeIf(Predicate<IslandActivity> filter) {
+        boolean changed = persistent.values().removeIf(filter);
+        changed |= queue.removeIf(p -> filter.test(p.activity));
+        if (showing != null && filter.test(showing.activity)) {
+            showing = null;
+            changed = true;
+        }
         if (changed) recompute();
     }
 
