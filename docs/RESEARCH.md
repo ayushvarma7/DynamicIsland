@@ -254,6 +254,7 @@ The default compact overlaps the status-bar content regions by 107 px on each si
 | F14 | Google Sans and Google Sans Flex are OFL on Google Fonts (Flex since 2025-11-18) | Research pass | Generic-tier fallback can bundle Google Sans Flex instead of Roboto Flex (ADR-006) |
 | F15 | `adb install` is not a restricted-settings source (package source OTHER); only local-file and downloaded-file installs are. Android 16 blocks granting accessibility during a call with a non-contact | AOSP 17 code via mirror; probe install source | Sideload via adb (ADR-008); onboarding explains the call-time block |
 | F16 | The Android 17 system contact picker (`ContactsPickerSessionContract.ACTION_PICK_CONTACTS`, API 37) returns selected fields without `READ_CONTACTS`; below 37, `ACTION_PICK` grants temporary access to the picked contact | developer.android.com | Tap Card contact shortcuts (P1.7) need no contacts permission on any API level |
+| F18 | An accessibility overlay above the status bar receives **no status-bar insets** (`isVisible(statusBars())` false, top 0, even ignoring visibility). Its own insets can't detect fullscreen apps | Emulator, prototype | Fullscreen auto-hide (§6.6.5) needs another signal; open item. Camera-app and landscape auto-hide work |
 | F17 | Your phone runs the August build; the September stable build for Pixel 8 is CP3A.260905.009 (Android 17 QPR1, released 2026-09-15) | Pixel Community post | Measurements here are on 37.0. Re-probe after you update (rule 9.5 handles it) |
 
 ## 10. Competitor teardown (Phase 0 extension)

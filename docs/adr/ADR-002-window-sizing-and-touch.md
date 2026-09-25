@@ -36,3 +36,7 @@ Still needed on Pixel 8: the same 50/50 test; P95 frame time for expand/collapse
 
 - The renderer must expose the island's current outer bounds (plus 6 dp slop, clipped away from status-bar icon zones) as a `Region` at every state change.
 - Region updates call `requestLayout` internally. Push them at state boundaries, not per frame, unless Phase 2 profiling says per-frame is free.
+
+## Prototype (2026-09-25)
+
+The Java prototype ships option **B**: one window sized for every presentation (1080 × 621 px on the emulator), with `setTouchableRegion` updated whenever the island's bounds move more than 2 px. It's the simplest way to guarantee the window never resizes mid-animation. Option C (small window at idle) stays the target once the Pixel 8 power and composition numbers exist.
