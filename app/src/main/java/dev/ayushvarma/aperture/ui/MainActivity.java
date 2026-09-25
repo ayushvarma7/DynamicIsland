@@ -1,6 +1,5 @@
 package dev.ayushvarma.aperture.ui;
 
-import android.accessibilityservice.AccessibilityServiceInfo;
 import android.app.Activity;
 import android.app.NotificationManager;
 import android.content.ComponentName;
@@ -13,7 +12,6 @@ import android.provider.Settings;
 import android.security.advancedprotection.AdvancedProtectionManager;
 import android.view.Gravity;
 import android.view.View;
-import android.view.accessibility.AccessibilityManager;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -51,6 +49,10 @@ public final class MainActivity extends Activity {
     private Step appsStep;
     private TextView aapm;
     private boolean pickerOffered;
+    private LinearLayout setupSection;
+    private com.google.android.material.materialswitch.MaterialSwitch islandSwitch;
+    private MaterialButton reviewSetup;
+    private boolean setupExpanded;
     private LivePreview preview;
 
     /** One setup step: a status dot, a title, a line of status and an action button. */
@@ -102,13 +104,18 @@ public final class MainActivity extends Activity {
         aapm = Ui.text(this, getString(dev.ayushvarma.aperture.R.string.main_aapm), R.style.TextAppearance_Material3_BodyMedium);
         aapm.setTextColor(RED);
         page.addView(aapm);
-        Ui.title(page, getString(dev.ayushvarma.aperture.R.string.main_setup));
-        overlayStep = new Step(page, dev.ayushvarma.aperture.R.string.main_a11y_title,
+        // The setup steps live in their own section so they can fold away once everything is granted.
+        setupSection = new LinearLayout(this);
+        setupSection.setOrientation(LinearLayout.VERTICAL);
+        page.addView(setupSection);
+        LinearLayout setup = setupSection;
+        Ui.title(setup, getString(dev.ayushvarma.aperture.R.string.main_setup));
+        overlayStep = new Step(setup, dev.ayushvarma.aperture.R.string.main_a11y_title,
                 v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
         overlayStep.card.addView(Ui.text(this, getString(dev.ayushvarma.aperture.R.string.main_disclosure),
                 R.style.TextAppearance_Material3_BodySmall));
-        listenerStep = new Step(page, dev.ayushvarma.aperture.R.string.main_listener_title, v -> openListenerSettings());
-        appsStep = new Step(page, dev.ayushvarma.aperture.R.string.main_apps_title,
+        listenerStep = new Step(setup, dev.ayushvarma.aperture.R.string.main_listener_title, v -> openListenerSettings());
+        appsStep = new Step(setup, dev.ayushvarma.aperture.R.string.main_apps_title,
                 v -> startActivity(new Intent(this, AppsActivity.class)));
 
         buildAppearance(page);
@@ -120,49 +127,9 @@ public final class MainActivity extends Activity {
         Ui.button(demo, getString(dev.ayushvarma.aperture.R.string.main_demo_notification), v -> demoMessage());
         Ui.button(demo, getString(dev.ayushvarma.aperture.R.string.main_demo_timer), v -> demoTimer());
         Ui.button(demo, getString(dev.ayushvarma.aperture.R.string.main_demo_charging), v -> demoCharging());
-        buildHelp(page);
+        Ui.button(page, getString(dev.ayushvarma.aperture.R.string.help_open),
+                v -> startActivity(new Intent(this, HelpActivity.class)));
     }
-
-    /** Help and feedback: answers to the questions people actually hit, and a direct line to the developer. */
-    private void buildHelp(LinearLayout page) {
-        Ui.title(page, getString(dev.ayushvarma.aperture.R.string.help_title));
-        LinearLayout faq = Ui.card(page);
-        int[][] items = {
-                {dev.ayushvarma.aperture.R.string.faq_stopped_q, dev.ayushvarma.aperture.R.string.faq_stopped_a},
-                {dev.ayushvarma.aperture.R.string.faq_double_q, dev.ayushvarma.aperture.R.string.faq_double_a},
-                {dev.ayushvarma.aperture.R.string.faq_nothing_q, dev.ayushvarma.aperture.R.string.faq_nothing_a},
-                {dev.ayushvarma.aperture.R.string.faq_protection_q, dev.ayushvarma.aperture.R.string.faq_protection_a},
-                {dev.ayushvarma.aperture.R.string.faq_privacy_q, dev.ayushvarma.aperture.R.string.faq_privacy_a},
-        };
-        for (int[] qa : items) {
-            TextView q = Ui.text(this, getString(qa[0]), R.style.TextAppearance_Material3_TitleSmall);
-            q.setPadding(0, Ui.dp(this, 10), 0, Ui.dp(this, 2));
-            faq.addView(q);
-            faq.addView(Ui.text(this, getString(qa[1]), R.style.TextAppearance_Material3_BodyMedium));
-        }
-        LinearLayout actions = Ui.card(page);
-        Ui.button(actions, getString(dev.ayushvarma.aperture.R.string.help_feedback), v -> sendFeedback());
-    }
-
-    /**
-     * Opens the user's email app addressed to the developer, with the device report and settings in the body so
-     * a bug report is actionable. Nothing is sent unless the user presses send (the app has no internet).
-     */
-    private void sendFeedback() {
-        String body = getString(dev.ayushvarma.aperture.R.string.feedback_body_intro) + "\n\n\n---\n"
-                + dev.ayushvarma.aperture.device.DeviceReport.build(this, settings) + "\nSettings\n" + settings.export();
-        Intent mail = new Intent(Intent.ACTION_SENDTO, android.net.Uri.parse("mailto:"))
-                .putExtra(Intent.EXTRA_EMAIL, new String[]{getString(dev.ayushvarma.aperture.R.string.feedback_email)})
-                .putExtra(Intent.EXTRA_SUBJECT, getString(dev.ayushvarma.aperture.R.string.feedback_subject))
-                .putExtra(Intent.EXTRA_TEXT, body);
-        try {
-            startActivity(mail);
-        } catch (android.content.ActivityNotFoundException e) {
-            startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain")
-                    .putExtra(Intent.EXTRA_TEXT, body), null));
-        }
-    }
-
 
     private void buildBanner(LinearLayout page) {
         banner = new MaterialCardView(this);
@@ -179,6 +146,20 @@ public final class MainActivity extends Activity {
         bannerText = Ui.text(this, "", R.style.TextAppearance_Material3_BodyMedium);
         inner.addView(bannerTitle);
         inner.addView(bannerText);
+        // Once set up: a plain on/off switch (pause without revoking anything) and a way back to the steps.
+        islandSwitch = new com.google.android.material.materialswitch.MaterialSwitch(this);
+        islandSwitch.setText(dev.ayushvarma.aperture.R.string.main_island_on);
+        islandSwitch.setTypeface(Fonts.medium());
+        islandSwitch.setChecked(settings.enabled());
+        islandSwitch.setOnCheckedChangeListener((b, on) -> settings.setBoolean("enabled", on));
+        inner.addView(islandSwitch);
+        reviewSetup = new MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle);
+        reviewSetup.setTypeface(Fonts.medium());
+        reviewSetup.setOnClickListener(v -> {
+            setupExpanded = !setupExpanded;
+            refreshSetup();
+        });
+        inner.addView(reviewSetup);
         banner.addView(inner);
         page.addView(banner);
     }
@@ -228,6 +209,11 @@ public final class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         preview.setRunning(true);
+        refreshSetup();
+    }
+
+    /** Recomputes every setup step and the banner from the live permission state. */
+    private void refreshSetup() {
         boolean overlay = isOverlayEnabled();
         boolean listener = getSystemService(NotificationManager.class)
                 .isNotificationListenerAccessGranted(new ComponentName(this, NotificationSource.class));
@@ -252,6 +238,16 @@ public final class MainActivity extends Activity {
                 : getString(dev.ayushvarma.aperture.R.string.banner_todo, done));
         bannerText.setText(complete ? dev.ayushvarma.aperture.R.string.banner_done_text : dev.ayushvarma.aperture.R.string.banner_todo_text);
         aapm.setVisibility(isAdvancedProtectionOn() ? View.VISIBLE : View.GONE);
+        // Setup folds away when complete; it comes back on its own if anything goes missing.
+        setupSection.setVisibility(!complete || setupExpanded ? View.VISIBLE : View.GONE);
+        islandSwitch.setVisibility(complete ? View.VISIBLE : View.GONE);
+        reviewSetup.setVisibility(complete ? View.VISIBLE : View.GONE);
+        reviewSetup.setText(setupExpanded ? dev.ayushvarma.aperture.R.string.main_hide_setup
+                : dev.ayushvarma.aperture.R.string.main_review_setup);
+        if (complete) {
+            bannerText.setText(settings.enabled() ? dev.ayushvarma.aperture.R.string.banner_done_text
+                    : dev.ayushvarma.aperture.R.string.banner_paused_text);
+        }
         // Once both permissions are granted, go straight to the last step.
         if (overlay && listener && !apps && !pickerOffered) {
             pickerOffered = true;
@@ -268,11 +264,17 @@ public final class MainActivity extends Activity {
         return n;
     }
 
+    /**
+     * Reads the enabled-services setting itself: AccessibilityManager's list can briefly omit a service while
+     * Android rebinds it (for example right after an app update), which would show a false red step.
+     */
     private boolean isOverlayEnabled() {
         ComponentName me = new ComponentName(this, IslandAccessibilityService.class);
-        for (AccessibilityServiceInfo info : getSystemService(AccessibilityManager.class)
-                .getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)) {
-            if (me.flattenToString().equals(info.getId()) || me.flattenToShortString().equals(info.getId())) return true;
+        String enabled = Settings.Secure.getString(getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+        if (enabled == null) return false;
+        for (String id : enabled.split(":")) {
+            ComponentName c = ComponentName.unflattenFromString(id);
+            if (me.equals(c)) return true;
         }
         return false;
     }

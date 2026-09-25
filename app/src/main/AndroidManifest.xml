@@ -4,6 +4,8 @@
     <!-- Section 8 permission list. No INTERNET: nothing leaves the device. -->
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.QUERY_ADVANCED_PROTECTION_MODE" />
+    <!-- Lets "Uninstall Aperture" open Android's own uninstall confirmation. -->
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
 
     <queries>
         <!-- App names and icons for the apps whose media and notifications we show. -->
@@ -44,6 +46,7 @@
         <activity android:name=".ui.CalibrationActivity" android:exported="false" />
         <activity android:name=".ui.AppsActivity" android:exported="false" />
         <activity android:name=".ui.AdvancedActivity" android:exported="false" />
+        <activity android:name=".ui.HelpActivity" android:exported="false" />
         <activity android:name=".ui.DeviceReportActivity" android:exported="false" />
         <activity
             android:name=".ui.ReplyActivity"

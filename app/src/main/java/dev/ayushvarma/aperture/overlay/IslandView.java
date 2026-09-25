@@ -299,7 +299,7 @@ public final class IslandView extends View {
     // ---- Targeting ---------------------------------------------------------------------------------
 
     private Content decide() {
-        if (g == null || suppressed || !g.visible) return new Content(Presentation.HIDDEN, null);
+        if (g == null || suppressed || !g.visible || !settings.enabled()) return new Content(Presentation.HIDDEN, null);
         IslandActivity t = onScreen(state.transientActivity) ? null : state.transientActivity;
         boolean callsOnly = locked && settings.lockScreen() == IslandSettings.LockScreen.CALLS_ONLY;
         if (t != null && !callsOnly) {

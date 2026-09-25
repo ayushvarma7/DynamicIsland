@@ -152,6 +152,11 @@ public final class IslandSettings {
         return prefs.getBoolean("artwork_accent", true);
     }
 
+    /** Master switch: pause the island without revoking any permission. */
+    public boolean enabled() {
+        return prefs.getBoolean("enabled", true);
+    }
+
     /** Hide an app's activity while that app is on screen (like iPhone). */
     public boolean hideInForeground() {
         return prefs.getBoolean("hide_foreground", true);
