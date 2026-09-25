@@ -85,7 +85,7 @@ Tap and long-press can be swapped in Advanced.
 
 ## Privacy
 
-Aperture has no internet permission, so nothing can leave your phone. It never reads what is on your screen: the accessibility service only draws the island and watches which app is in front. Notifications are read on the phone to build the island and are never stored. Feedback opens your own email app with a report you can read and edit before sending.
+Aperture has no internet permission, so nothing can leave your phone. It never reads what is on your screen: the accessibility service only draws the island and watches which app is in front. Notifications are read on the phone to build the island and are never stored. Feedback opens your own email app with a report you can read and edit before sending. The full policy is in [PRIVACY.md](PRIVACY.md).
 
 ## Build
 
@@ -96,6 +96,8 @@ JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ./gradle
 ```
 
 The APK is `app/build/outputs/apk/debug/app-debug.apk`.
+
+For the Play Store bundle (`./gradlew :app:bundleRelease`), signing, and every answer the Play Console asks for, see [docs/PLAY_STORE.md](docs/PLAY_STORE.md).
 
 ## Install and set up (Pixel)
 
