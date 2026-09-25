@@ -22,7 +22,7 @@
 | Host | macOS 26.6.2, Apple M4, 16 GB RAM, **13 GiB free disk (94% full)** |
 | Android SDK | `~/Library/Android/sdk` (not on PATH): platforms 34 and 36 (36.0 stubs), build-tools up to 36.1.0, emulator 36.3.10, platform-tools 36.0.2. **Missing: platform 37** (required, [ADR-009](adr/ADR-009-min-sdk.md)) and cmdline-tools |
 | JDK | Android Studio's bundled JBR 21. The JDK 11 on PATH is too old for AGP 9 |
-| Android Studio | 2025.2.2 installed. The current stable is Quail 4 (2026.1.4), which supports AGP 7.1–9.4. Command-line builds don't care; opening the product in the IDE likely needs the update |
+| Android Studio | 2025.2.2 installed. The current stable is Quail 4 (2026.1.4), which supports AGP 7.1-9.4. Command-line builds don't care; opening the product in the IDE likely needs the update |
 | Emulator | AVD `Medium_Phone_API_36.1`: Android 16 QPR2, build BE4B.251210.005, 1080 × 2400 at 420 dpi (the same panel resolution as the Pixel 8), Google Play image. Its animator scales are 0, so rule A1 fires there |
 | Probe | Zero-dependency Java against the AGP 8.13.2 already cached, so it built offline with no downloads |
 
@@ -87,13 +87,13 @@ Measured on 2026-09-25 from an ordinary third-party app context (the probe activ
 |---|---|---|
 | Resolution / density | 1080 × 2400 px, 420 dpi (2.625), 411 × 914 dp, xdpi 428.6 / ydpi 426.3, about 6.17 in | `DisplayMetrics`, `Configuration` |
 | Cutout spec | `m 576,65.75 a 36.25,36.25 0 0 0 -72.5,0 36.25,36.25 0 0 0 72.5,0 z @left` (px, left-anchored) | *dumpsys display*; also readable via `Resources.getSystem()` `config_mainBuiltInDisplayCutout` |
-| Cutout circle | **center (539.75, 65.75) px, r = 36.25 px (13.81 dp)**, 0.25 px left of the screen center | `DisplayCutout.getCutoutPath()` bounds 503.5–576 × 29.5–102 |
-| Cutout bounding rect (top) | 479–601 × 0–132 | `getBoundingRectTop()`; spec rect `M 478.5,0 h 122 v 132 h -122 Z @left` |
+| Cutout circle | **center (539.75, 65.75) px, r = 36.25 px (13.81 dp)**, 0.25 px left of the screen center | `DisplayCutout.getCutoutPath()` bounds 503.5-576 × 29.5-102 |
+| Cutout bounding rect (top) | 479-601 × 0-132 | `getBoundingRectTop()`; spec rect `M 478.5,0 h 122 v 132 h -122 Z @left` |
 | Safe inset / status bar height | 132 px top (`status_bar_height` 132 portrait, 74 default and landscape) | `WindowInsets`, framework dimens |
 | Screen corners | **top radius 104 px (39.6 dp)**, bottom 102 px; centers (104, 104), (976, 104), (978, 2298), (102, 2298) | `Display.getRoundedCorner` |
 | Display shape | A continuous-curvature (non-circular) corner path, `config_mainDisplayShape` starting `M 96,0 C 91,0 83,2 79,2 …` | `Display.getShape()` |
 | Waterfall insets | 0 | `DisplayCutout.getWaterfallInsets()` |
-| Privacy indicator zone | **x 810–1026, y 0–132** | `WindowInsets.getPrivacyIndicatorBounds()` (public, API 31) |
+| Privacy indicator zone | **x 810-1026, y 0-132** | `WindowInsets.getPrivacyIndicatorBounds()` (public, API 31) |
 | Nav bar | 63 px gesture bar (126 px frame) | Insets |
 
 ### 4.3 Refresh
@@ -172,7 +172,7 @@ All in px at density 2.625, from the measured inputs above.
 | Ring gap g | 3 dp | 7.875 |
 | Idle/compact height Hc | 2r + 2g | **88.25** (33.6 dp), fits inside the 132 px status bar |
 | Lw = Tw | round(1.4 × Hc) | 124 |
-| Compact width | Hc + Lw + Tw | **336.25**, x 371.6–707.9 |
+| Compact width | Hc + Lw + Tw | **336.25**, x 371.6-707.9 |
 | Camera keep-out | r + 4 dp | radius 46.75 |
 | Minimal bubble | diameter Hc, gap 6 dp | 88.25, gap 15.75 |
 | Expanded width We | screen − 2 × 12 dp | 1017 |
@@ -239,9 +239,9 @@ The default compact overlaps the status-bar content regions by 107 px on each si
 | # | Finding | Evidence | Where it lands |
 |---|---|---|---|
 | F1 | Public touchable region works for accessibility overlays | 50/50, 50/50, control 0/50 | ADR-002 option C |
-| F2 | `WindowInsets.getPrivacyIndicatorBounds()` is public and gives the privacy-dot zone (Pixel 8: x 810–1026) | Probe | Guard §6.6.3, ADR-004 |
+| F2 | `WindowInsets.getPrivacyIndicatorBounds()` is public and gives the privacy-dot zone (Pixel 8: x 810-1026) | Probe | Guard §6.6.3, ADR-004 |
 | F3 | SystemUI's status-bar dimensions are readable without window content (Pixel 8: content inset 70 + 11 px per side, icon size 58, clock 37, privacy dot 16) | Probe | ADR-004 option C |
-| F4 | SystemUI draws its own Live Update chip at the start (left) of the status bar whenever a notification is promoted (x 158–332 on the emulator; its position next to the clock on the Pixel 8 is still to be measured). It takes status-bar width and duplicates what the island shows | Emulator screenshot | ADR-004; Settings explains the duplication |
+| F4 | SystemUI draws its own Live Update chip at the start (left) of the status bar whenever a notification is promoted (x 158-332 on the emulator; its position next to the clock on the Pixel 8 is still to be measured). It takes status-bar width and duplicates what the island shows | Emulator screenshot | ADR-004; Settings explains the duplication |
 | F5 | Force-stopping the app disables its accessibility service (removed from `enabled_accessibility_services`) | Emulator | Health screen (§8) must detect and deep-link |
 | F6 | Windows added through the accessibility `WindowManager` inherit the accessibility layer, even `TYPE_APPLICATION_OVERLAY` | Emulator screenshots | ADR-001 |
 | F7 | Contrast callback precedes the resource update; `Resources.getSystem()` is stale | Emulator logs | Theme engine (Phase 5) |
@@ -259,7 +259,7 @@ The default compact overlaps the status-bar content regions by 107 px on each si
 
 ## 10. Competitor teardown (Phase 0 extension)
 
-Data from Play listings, Data safety pages and 2025–2026 reviews, read on 2026-09-25. Reddit was not reachable, so XDA and Pixel Community threads stand in until you paste the thread.
+Data from Play listings, Data safety pages and 2025-2026 reviews, read on 2026-09-25. Reddit was not reachable, so XDA and Pixel Community threads stand in until you paste the thread.
 
 | | Material Capsule | dynamicSpot | Dynamic Notch |
 |---|---|---|---|
@@ -273,7 +273,7 @@ Data from Play listings, Data safety pages and 2025–2026 reviews, read on 2026
 
 Claim checks against §3.1 (details in the research transcript):
 - **Material Capsule:** most weaknesses confirmed by single reviews (Spotify has no compact progress bar, a flash on expand, no "play last media", a thick border). Call support is the top request (about two dozen of 180 reviews). Also no Maps or Live Updates, no multiple activities, and a timer card that broke after Google Clock 9.0.
-- **dynamicSpot:** the visualizer fails with Bluetooth, Libby and Adaptive Sound (confirmed by its developer); it covers status icons; it stops working after days. The screen-record overlap is unconfirmed; the banking-app refusal has only 2024 evidence. Also: 400–600 MB RAM and a 120 → 90 Hz drop reported.
+- **dynamicSpot:** the visualizer fails with Bluetooth, Libby and Adaptive Sound (confirmed by its developer); it covers status icons; it stops working after days. The screen-record overlap is unconfirmed; the banking-app refusal has only 2024 evidence. Also: 400-600 MB RAM and a 120 → 90 Hz drop reported.
 - **Dynamic Notch:** ads after lifetime purchase, "aggressive" permissions, and the not-encrypted declaration are confirmed. Play Protect warnings are only partly confirmed ("Google warns it's dangerous").
 
 Top user wishes across sources: calls; Maps, ride and delivery Live Updates; several activities with swipe between them; an always-on pill; foldable positions; landscape; adjustable timings; timers from any clock app; hiding status icons while expanded; settings backup.
@@ -290,7 +290,7 @@ Related projects worth knowing: LiveBridge (GPL-3.0; re-posts any app's notifica
 
 ## 12. Emulator plan for Phase 1 (disk is the constraint)
 
-Phase 1 needs Pixel 9, Pixel Tablet (G3) and corner-cutout (G2) AVDs. The only system image installed is API 36.1, and each extra image is about 1.5–2 GB plus up to 6 GB of AVD data, against 13 GiB free. Plan: reuse the one API 36.1 image for all three, as hardware profiles (Pixel 9 size and density; Tablet with no cutout; phone with the corner-cutout overlay), each created fresh and deleted after use. Reboot the AVD after switching cutout overlays (F10). Installing platform 37 (about 70 MB) is also needed for compileSdk 37.
+Phase 1 needs Pixel 9, Pixel Tablet (G3) and corner-cutout (G2) AVDs. The only system image installed is API 36.1, and each extra image is about 1.5-2 GB plus up to 6 GB of AVD data, against 13 GiB free. Plan: reuse the one API 36.1 image for all three, as hardware profiles (Pixel 9 size and density; Tablet with no cutout; phone with the corner-cutout overlay), each created fresh and deleted after use. Reboot the AVD after switching cutout overlays (F10). Installing platform 37 (about 70 MB) is also needed for compileSdk 37.
 
 ## 13. Open items blocking Phase 0 acceptance
 

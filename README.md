@@ -79,6 +79,6 @@ Tap and long-press can be swapped in Behavior for iPhone-style behaviour.
 
 | Path | What |
 |---|---|
-| `core/` | Pure Java: geometry (Section 7.2 and rules G1–G5), the island engine (priorities, queue, pinning, expiry), playback math. Unit-tested |
+| `core/` | Pure Java: geometry (Section 7.2 and rules G1-G5), the island engine (priorities, queue, pinning, expiry), playback math. Unit-tested |
 | `app/` | The Android app: overlay service and renderer, notification and media sources, settings screens |
 | `spikes/phase0-probe/` | Throwaway Phase 0 measuring app |

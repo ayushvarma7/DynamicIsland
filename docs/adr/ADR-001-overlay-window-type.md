@@ -17,7 +17,7 @@
 |---|---|---|---|
 | Draws above the status bar | Yes: the debug ring renders over status-bar icons and over the system Live Update chip | **No**: status-bar icons stay crisp on top of a 50% red overlay | Emulator API 36.1 screenshots, `spikes/phase0-probe` `cmd app_overlay` (screenshots kept in the session scratchpad, reproducible with the probe) |
 | Draws above system heads-up and dialogs | Yes: stays above the HUN card and the MediaOutputDialog dim | n/a | Emulator screenshots |
-| Trusted overlay for Android 12+ untrusted-touch blocking | Yes: `TYPE_ACCESSIBILITY_OVERLAY` is listed as trusted | No: `TYPE_APPLICATION_OVERLAY` is untrusted, max obscuring opacity 0.8 | SDK 36 `WindowManager.java` `FLAG_NOT_TOUCHABLE` Javadoc (lines ~2800–2857) |
+| Trusted overlay for Android 12+ untrusted-touch blocking | Yes: `TYPE_ACCESSIBILITY_OVERLAY` is listed as trusted | No: `TYPE_APPLICATION_OVERLAY` is untrusted, max obscuring opacity 0.8 | SDK 36 `WindowManager.java` `FLAG_NOT_TOUCHABLE` Javadoc (lines ~2800-2857) |
 | Foreground package without window content | Yes: `typeWindowStateChanged` gives package + class with `canRetrieveWindowContent="false"`; `getSource()` is null | n/a | Emulator log `a11y_window_state` (camera app, launcher, SystemUI dialog) |
 | Works from a sideloaded build | Yes (granted via adb on the emulator). On the phone the user grants it in Settings | Yes | Probe |
 | Pixel 8 (Android 17) | Pending: needs the user to enable the probe's accessibility service | n/a | Phase 1 |
