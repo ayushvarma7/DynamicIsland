@@ -16,4 +16,5 @@ One per Section 10 gate (plus D13, found in Phase 0). Every record lists options
 | [010](ADR-010-expanded-body.md) | D10 expanded body | **ASK** | Black (default) | Your pick from Phase 2 screenshots |
 | [011](ADR-011-refresh-boost.md) | D11 refresh boost | Draft | A via `setRequestedFrameRate(HIGH)` if it measures | Pixel 8 cadence run |
 | [012](ADR-012-profile-matching.md) | D12 profile matching | Draft | A: codename + measured geometry | Phase 1 `shiba` verification |
-| [013](ADR-013-material3-expressive-dependency.md) | D13 (new) M3 Expressive source | **ASK** | Recommend A: pinned material3 alpha in `:core:theme` only | Your call |
+| [013](ADR-013-material3-expressive-dependency.md) | D13 (new) M3 Expressive source | Superseded by 014 | Compose-only APIs; not usable from Java | Nothing |
+| [014](ADR-014-java-and-views.md) | Language and UI toolkit | **Accepted** | Java + Android Views + dynamicanimation springs | Nothing |
