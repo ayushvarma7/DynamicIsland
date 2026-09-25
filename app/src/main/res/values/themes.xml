@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dynamic color is applied in ApertureApp, so the settings app matches the system theme like the island. -->
+    <style name="Theme.Aperture" parent="Theme.Material3.DynamicColors.DayNight.NoActionBar" />
+
+    <style name="Theme.Aperture.Dialog" parent="Theme.Material3.DayNight.Dialog.Alert">
+        <item name="android:windowMinWidthMajor">90%</item>
+        <item name="android:windowMinWidthMinor">90%</item>
+    </style>
+</resources>

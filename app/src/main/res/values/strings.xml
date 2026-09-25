@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Aperture</string>
+    <string name="service_label">Aperture island</string>
+    <string name="listener_label">Aperture media and notifications</string>
+    <string name="service_description">Draws the Aperture island around your camera, above the status bar. It only learns which app is in the foreground, to hide the island in camera apps. It cannot read what is on your screen, and nothing leaves your phone.</string>
+
+    <string name="island_new_notification">New notification</string>
+    <string name="island_incoming_call">Incoming call</string>
+    <string name="island_call_from">%1$s call</string>
+    <string name="island_open">Open</string>
+    <string name="island_reply">Reply</string>
+    <string name="island_charging">Charging</string>
+    <string name="island_unplugged">Unplugged</string>
+    <string name="island_low_battery">Low battery</string>
+    <string name="island_idle_description">Aperture island</string>
+
+    <string name="main_subtitle">A Pixel-native island around your camera.</string>
+    <string name="main_setup">Setup</string>
+    <string name="main_a11y_title">Island overlay</string>
+    <string name="main_a11y_on">On. The island is drawing.</string>
+    <string name="main_a11y_off">Off. Turn on "Aperture island" in Accessibility.</string>
+    <string name="main_listener_title">Media and notifications</string>
+    <string name="main_listener_on">On. Spotify, YouTube Music, WhatsApp and calls will show.</string>
+    <string name="main_listener_off">Off. Allow "Aperture media and notifications".</string>
+    <string name="main_aapm">Advanced Protection is on. Android blocks accessibility services that are not accessibility tools, so the island cannot draw until you turn Advanced Protection off. This is a system rule and no island app can work around it.</string>
+    <string name="main_disclosure">What the accessibility permission is used for: drawing the island over the status bar, and knowing which app is in front so the island hides in camera apps. Aperture cannot read screen content, has no internet permission, and keeps nothing off your phone.</string>
+    <string name="main_open_settings">Open settings</string>
+    <string name="main_appearance">Appearance</string>
+    <string name="main_idle">When idle</string>
+    <string name="main_idle_ring">Black ring</string>
+    <string name="main_idle_invisible">Invisible</string>
+    <string name="main_idle_hidden">Hidden</string>
+    <string name="main_body">Expanded body</string>
+    <string name="main_body_black">Black</string>
+    <string name="main_body_tonal">Tonal</string>
+    <string name="main_motion">Motion</string>
+    <string name="main_motion_expressive">Expressive</string>
+    <string name="main_motion_standard">Standard</string>
+    <string name="main_motion_fluid">Fluid</string>
+    <string name="main_behavior">Behavior</string>
+    <string name="main_show_notifications">Show notifications</string>
+    <string name="main_show_media">Show media</string>
+    <string name="main_haptics">Haptics</string>
+    <string name="main_double_tap">Double-tap the idle island</string>
+    <string name="main_double_torch">Flashlight</string>
+    <string name="main_double_resume">Resume media</string>
+    <string name="main_double_nothing">Nothing</string>
+    <string name="main_notification_time">Notification time: %1$d s</string>
+    <string name="main_calibrate">Calibrate</string>
+    <string name="main_device_report">Device report</string>
+    <string name="main_try">Try it</string>
+    <string name="main_try_hint">Shows sample activities on the island without any app.</string>
+    <string name="main_demo_notification">Message</string>
+    <string name="main_demo_timer">Timer</string>
+    <string name="main_demo_charging">Charging</string>
+    <string name="demo_sender">Aperture</string>
+    <string name="demo_message">This is how a message from WhatsApp will look. Swipe up to dismiss.</string>
+    <string name="demo_timer">Timer</string>
+
+    <string name="calibrate_title">Calibrate</string>
+    <string name="calibrate_hint">The outline shows the camera cutout Android reports. Nudge the ring until it sits evenly around your camera. Changes apply live.</string>
+    <string name="calibrate_x">Horizontal: %1$.1f dp</string>
+    <string name="calibrate_y">Vertical: %1$.1f dp</string>
+    <string name="calibrate_size">Size: %1$+.1f dp</string>
+    <string name="calibrate_gap">Ring gap: %1$.1f dp</string>
+    <string name="calibrate_width">Compact width: %1$d%%</string>
+    <string name="calibrate_reset">Reset</string>
+
+    <string name="report_title">Device report</string>
+    <string name="report_share">Share report</string>
+
+    <string name="reply_hint">Reply</string>
+    <string name="reply_send">Send</string>
+    <string name="reply_unavailable">This notification can no longer be replied to.</string>
+</resources>

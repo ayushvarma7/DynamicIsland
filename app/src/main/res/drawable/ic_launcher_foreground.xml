@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A pill around a camera dot. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M32,42h44a12,12 0,0 1,0 24h-44a12,12 0,0 1,0 -24z" />
+    <path
+        android:fillColor="#FF2B2B2B"
+        android:pathData="M54,47a7,7 0,1 1,0 14a7,7 0,1 1,0 -14z" />
+    <path
+        android:fillColor="#FFB5C5F9"
+        android:pathData="M32,50h10v8h-10z" />
+</vector>
