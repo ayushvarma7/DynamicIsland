@@ -14,6 +14,8 @@ import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.card.MaterialCardView;
 
+import dev.ayushvarma.aperture.theme.Fonts;
+
 /** Small builders so the settings screens stay readable in plain Java. */
 final class Ui {
     private Ui() {}
@@ -43,6 +45,12 @@ final class Ui {
         TextView t = new TextView(c);
         t.setTextAppearance(appearance);
         t.setText(s);
+        // Google Sans (the Pixel system font) instead of the Material default Roboto.
+        boolean strong = appearance == com.google.android.material.R.style.TextAppearance_Material3_TitleMedium
+                || appearance == com.google.android.material.R.style.TextAppearance_Material3_TitleSmall
+                || appearance == com.google.android.material.R.style.TextAppearance_Material3_LabelLarge
+                || appearance == com.google.android.material.R.style.TextAppearance_Material3_HeadlineMedium;
+        t.setTypeface(strong ? Fonts.medium() : Fonts.regular());
         return t;
     }
 
@@ -72,6 +80,7 @@ final class Ui {
     static MaterialButton button(LinearLayout parent, CharSequence label, View.OnClickListener l) {
         MaterialButton b = new MaterialButton(parent.getContext());
         b.setText(label);
+        b.setTypeface(Fonts.medium());
         b.setOnClickListener(l);
         parent.addView(b);
         return b;
@@ -87,6 +96,8 @@ final class Ui {
         for (int i = 0; i < labels.length; i++) {
             MaterialButton b = new MaterialButton(c, null, com.google.android.material.R.attr.materialButtonOutlinedStyle);
             b.setText(labels[i]);
+            b.setTypeface(Fonts.medium());
+            b.setMaxLines(1);
             ids[i] = View.generateViewId();
             b.setId(ids[i]);
             group.addView(b, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));

@@ -30,24 +30,44 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 Then, on the phone:
 
-1. Open **Aperture**.
-2. Setup > Island overlay > **Open settings**, then turn on **Aperture island**.
-3. Setup > Media and notifications > **Open settings**, then allow **Aperture media and notifications**.
-4. Optional: **Calibrate** to nudge the ring around your camera, in 0.5 dp steps.
-5. Try it: the **Message**, **Timer** and **Charging** buttons show sample activities without any other app.
+1. Open **Aperture**. Until setup is finished the banner is red and each missing step is marked red.
+2. Step 1, **Grant access**: turn on **Aperture island** in Accessibility.
+3. Step 2, **Grant access**: allow **Aperture media and notifications**.
+4. Step 3 opens by itself: choose which apps may use the island. Suggested apps start switched on.
+5. The banner turns green. Optional: **Calibrate** to nudge the ring around your camera in 0.5 dp steps.
+6. Try it: the **Message**, **Timer** and **Charging** buttons show sample activities without any other app.
 
 Installing over adb avoids Android's "restricted settings" block. If you install the APK from a file manager instead, first go to App info > ⋮ > **Allow restricted settings**.
+
+## What shows on the island
+
+Only the things worth a glance, and only from the apps you pick in setup:
+
+- **Music and media**, once you leave the player app (nothing shows while the player is on screen).
+- **Timers and stopwatches**, **deliveries and rides** (Live Updates), and **downloads**.
+- **Calls.**
+- Off by default, because they are high-frequency: message pop-ups, and charging/low battery. Turn them on in Behavior.
+
+Nothing from the app you are currently using is shown.
+
+## Screen care (OLED)
+
+A pill that stays on screen for hours wears the OLED around it unevenly. So after a few seconds without change (8 s by default, adjustable, or never), the pill shrinks back to the ring around the camera and shows its live state as a thin arc that moves every second. The compact content also shifts by 1 px each minute. On the lock screen the island shows new events briefly, then steps aside (or shows only calls).
 
 ## Gestures
 
 | Gesture | On | Does |
 |---|---|---|
-| Tap | pill or card | open the app |
-| Long-press or swipe down | pill | expand |
+| Tap | pill or halo | expand (reversible, keeps you in your app) |
+| Long-press | pill or halo | open the app |
+| Tap | expanded card | open the app (buttons do their own thing) |
+| Swipe down | pill | expand |
 | Swipe up | card | collapse or dismiss |
 | Swipe sideways | pill | switch between activities (pins your pick for 30 min) |
 | Swipe sideways | message card | dismiss the notification |
 | Double-tap | idle ring | flashlight (or resume media; set in Behavior) |
+
+Tap and long-press can be swapped in Behavior for iPhone-style behaviour.
 
 ## Known limits of this prototype
 

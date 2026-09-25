@@ -39,7 +39,7 @@ import dev.ayushvarma.aperture.settings.IslandSettings;
  * timers and downloads become persistent activities. Media-style notifications are skipped: the media session
  * carries the same information with exact position and controls.
  */
-public final class NotificationSource extends NotificationListenerService {
+public final class NotificationSource extends NotificationListenerService implements IslandSettings.Listener {
     private static final String CLOCK_PKG = "com.google.android.deskclock";
     private static final String EXTRA_SHORT_CRITICAL_TEXT = "android.shortCriticalText";
 
@@ -78,6 +78,7 @@ public final class NotificationSource extends NotificationListenerService {
         settings = ApertureApp.of(this).settings();
         media = new MediaTracker(this, new ComponentName(this, NotificationSource.class));
         media.start();
+        settings.addListener(this);
         StatusBarNotification[] active = getActiveNotifications();
         if (active == null) return;
         RankingMap rm = getCurrentRanking();
@@ -86,6 +87,7 @@ public final class NotificationSource extends NotificationListenerService {
 
     @Override
     public void onListenerDisconnected() {
+        if (settings != null) settings.removeListener(this);
         if (media != null) media.stop();
         for (String id : keyToId.values()) hub.remove(id);
         keyToId.clear();
@@ -93,6 +95,15 @@ public final class NotificationSource extends NotificationListenerService {
         instance = null;
         // Section 8 health: ask to be bound again rather than silently staying dead.
         requestRebind(new ComponentName(this, NotificationSource.class));
+    }
+
+    /** App picker or toggles changed: drop what is no longer allowed and re-read media sessions. */
+    @Override
+    public void onSettingsChanged() {
+        String own = getPackageName();
+        hub.engine().removeIf(a -> !own.equals(a.pkg) && (!settings.isAllowed(a.pkg)
+                || (a.kind == ActivityKind.MEDIA && !settings.showMedia())));
+        media.republish();
     }
 
     @Override
@@ -109,6 +120,7 @@ public final class NotificationSource extends NotificationListenerService {
 
     private void handle(StatusBarNotification sbn, RankingMap rm, boolean initial) {
         if (getPackageName().equals(sbn.getPackageName())) return;
+        if (!settings.isAllowed(sbn.getPackageName())) return;
         Notification n = sbn.getNotification();
         Bundle ex = n.extras;
         String template = ex.getString(Notification.EXTRA_TEMPLATE, "");

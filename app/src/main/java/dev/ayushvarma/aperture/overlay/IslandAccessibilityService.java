@@ -44,6 +44,7 @@ public final class IslandAccessibilityService extends AccessibilityService
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Set<String> cameraPackages = new HashSet<>();
+    private final Set<String> inputMethods = new HashSet<>();
     private final Runnable autoCollapse = () -> setExpanded(false);
     private final Runnable themeReread = this::refresh;
     private WindowManager wm;
@@ -51,6 +52,12 @@ public final class IslandAccessibilityService extends AccessibilityService
     private IslandView view;
     private Actions actions;
     private SystemEvents systemEvents;
+    private final android.content.BroadcastReceiver screenReceiver = new android.content.BroadcastReceiver() {
+        @Override
+        public void onReceive(android.content.Context c, Intent i) {
+            updateLocked();
+        }
+    };
     private IslandHub hub;
     private IslandSettings settings;
     private WindowInsets lastInsets;
@@ -80,6 +87,10 @@ public final class IslandAccessibilityService extends AccessibilityService
         lp.setFitInsetsTypes(0);
         lp.setTitle("Aperture island");
         loadCameraPackages();
+        for (android.view.inputmethod.InputMethodInfo imi : getSystemService(
+                android.view.inputmethod.InputMethodManager.class).getInputMethodList()) {
+            inputMethods.add(imi.getPackageName());
+        }
         refresh();
         wm.addView(view, lp);
         hub.addListener(this);
@@ -87,6 +98,11 @@ public final class IslandAccessibilityService extends AccessibilityService
         view.setState(hub.state());
         systemEvents = new SystemEvents(this);
         systemEvents.register();
+        android.content.IntentFilter screen = new android.content.IntentFilter(Intent.ACTION_SCREEN_ON);
+        screen.addAction(Intent.ACTION_SCREEN_OFF);
+        screen.addAction(Intent.ACTION_USER_PRESENT);
+        registerReceiver(screenReceiver, screen, RECEIVER_NOT_EXPORTED);
+        updateLocked();
     }
 
     @Override
@@ -94,7 +110,10 @@ public final class IslandAccessibilityService extends AccessibilityService
         main.removeCallbacksAndMessages(null);
         if (hub != null) hub.removeListener(this);
         if (settings != null) settings.removeListener(this);
-        if (systemEvents != null) systemEvents.unregister();
+        if (systemEvents != null) {
+            systemEvents.unregister();
+            unregisterReceiver(screenReceiver);
+        }
         if (actions != null) actions.release();
         if (view != null && view.isAttachedToWindow()) wm.removeViewImmediate(view);
         super.onDestroy();
@@ -104,7 +123,9 @@ public final class IslandAccessibilityService extends AccessibilityService
     public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event.getEventType() != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED || event.getPackageName() == null) return;
         String pkg = event.getPackageName().toString();
-        if (pkg.equals("com.android.systemui")) return; // shade and dialogs don't change the foreground app
+        // The shade, dialogs, the keyboard and our own settings screens don't change which app the user is in.
+        if (pkg.equals("com.android.systemui") || pkg.equals(getPackageName()) || inputMethods.contains(pkg)) return;
+        view.setForegroundPackage(pkg);
         boolean camera = cameraPackages.contains(pkg);
         if (camera != cameraForeground) {
             cameraForeground = camera;
@@ -147,6 +168,10 @@ public final class IslandAccessibilityService extends AccessibilityService
             if (view.isAttachedToWindow()) wm.updateViewLayout(view, lp);
         }
         view.configure(g, palette, settings);
+    }
+
+    private void updateLocked() {
+        view.setLocked(getSystemService(android.app.KeyguardManager.class).isKeyguardLocked());
     }
 
     private void updateSuppression() {

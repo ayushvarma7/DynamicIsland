@@ -41,7 +41,7 @@ public final class SystemEvents extends BroadcastReceiver {
     @Override
     public void onReceive(Context c, Intent intent) {
         String action = intent.getAction();
-        if (action == null) return;
+        if (action == null || !ApertureApp.of(ctx).settings().showSystemEvents()) return;
         int level = level();
         long now = System.currentTimeMillis();
         switch (action) {

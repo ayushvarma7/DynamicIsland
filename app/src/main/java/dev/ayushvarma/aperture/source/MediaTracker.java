@@ -90,6 +90,11 @@ final class MediaTracker {
         for (String pkg : new HashSet<>(tracked.keySet())) drop(pkg);
     }
 
+    /** Re-evaluates every tracked session after a settings change. */
+    void republish() {
+        for (Tracked t : tracked.values()) publish(t);
+    }
+
     private void onSessions(List<MediaController> controllers) {
         Set<String> live = new HashSet<>();
         if (controllers != null) {
@@ -119,7 +124,8 @@ final class MediaTracker {
     }
 
     private void publish(Tracked t) {
-        if (!ApertureApp.of(ctx).settings().showMedia()) {
+        if (!ApertureApp.of(ctx).settings().showMedia()
+                || !ApertureApp.of(ctx).settings().isAllowed(t.controller.getPackageName())) {
             hub.remove(t.id);
             return;
         }

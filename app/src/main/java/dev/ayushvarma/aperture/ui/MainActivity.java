@@ -5,15 +5,21 @@ import android.app.Activity;
 import android.app.NotificationManager;
 import android.content.ComponentName;
 import android.content.Intent;
+import android.content.res.Configuration;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.security.advancedprotection.AdvancedProtectionManager;
+import android.view.Gravity;
+import android.view.View;
 import android.view.accessibility.AccessibilityManager;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.google.android.material.R;
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.materialswitch.MaterialSwitch;
 import com.google.android.material.slider.Slider;
 
@@ -25,78 +31,85 @@ import dev.ayushvarma.aperture.overlay.IslandAccessibilityService;
 import dev.ayushvarma.aperture.settings.IslandSettings;
 import dev.ayushvarma.aperture.source.NotificationSource;
 import dev.ayushvarma.aperture.source.Payload;
+import dev.ayushvarma.aperture.theme.Fonts;
 
-/** Onboarding, health status (Section 8) and every island setting, applied live. */
+/**
+ * Setup and settings. Setup is three steps (overlay, notification access, app choice); until all three are done
+ * the banner is red and says what is missing, then it turns green (Section 8 health status).
+ */
 public final class MainActivity extends Activity {
-    private TextView a11yStatus;
-    private TextView listenerStatus;
-    private TextView aapm;
+    private static final int RED = 0xFFD93025;
+    private static final int GREEN = 0xFF1E8E3E;
+
     private IslandSettings settings;
+    private MaterialCardView banner;
+    private TextView bannerTitle;
+    private TextView bannerText;
+    private Step overlayStep;
+    private Step listenerStep;
+    private Step appsStep;
+    private TextView aapm;
+    private boolean pickerOffered;
+
+    /** One setup step: a status dot, a title, a line of status and an action button. */
+    private final class Step {
+        final LinearLayout card;
+        final View dot;
+        final TextView status;
+        final MaterialButton action;
+
+        Step(LinearLayout parent, int title, View.OnClickListener onClick) {
+            card = Ui.card(parent);
+            LinearLayout head = new LinearLayout(MainActivity.this);
+            head.setGravity(Gravity.CENTER_VERTICAL);
+            dot = new View(MainActivity.this);
+            int d = Ui.dp(MainActivity.this, 12);
+            LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(d, d);
+            dlp.setMarginEnd(Ui.dp(MainActivity.this, 10));
+            head.addView(dot, dlp);
+            head.addView(Ui.text(MainActivity.this, getString(title), R.style.TextAppearance_Material3_TitleSmall));
+            card.addView(head);
+            status = Ui.text(MainActivity.this, "", R.style.TextAppearance_Material3_BodyMedium);
+            card.addView(status);
+            action = Ui.button(card, "", onClick);
+        }
+
+        void set(boolean done, int statusText, int buttonText) {
+            GradientDrawable circle = new GradientDrawable();
+            circle.setShape(GradientDrawable.OVAL);
+            circle.setColor(done ? GREEN : RED);
+            dot.setBackground(circle);
+            status.setText(statusText);
+            status.setTextColor(done ? GREEN : RED);
+            action.setText(buttonText);
+        }
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         settings = ApertureApp.of(this).settings();
         LinearLayout page = Ui.page(this);
-        page.addView(Ui.text(this, getString(dev.ayushvarma.aperture.R.string.app_name), R.style.TextAppearance_Material3_DisplaySmall));
+        TextView name = Ui.text(this, getString(dev.ayushvarma.aperture.R.string.app_name), R.style.TextAppearance_Material3_DisplaySmall);
+        name.setTypeface(Fonts.medium());
+        page.addView(name);
         page.addView(Ui.text(this, getString(dev.ayushvarma.aperture.R.string.main_subtitle), R.style.TextAppearance_Material3_BodyLarge));
 
-        Ui.title(page, getString(dev.ayushvarma.aperture.R.string.main_setup));
+        buildBanner(page);
         aapm = Ui.text(this, getString(dev.ayushvarma.aperture.R.string.main_aapm), R.style.TextAppearance_Material3_BodyMedium);
-        aapm.setTextColor(getColor(android.R.color.system_error_light));
+        aapm.setTextColor(RED);
         page.addView(aapm);
-        LinearLayout a11y = Ui.card(page);
-        a11y.addView(Ui.text(this, getString(dev.ayushvarma.aperture.R.string.main_a11y_title), R.style.TextAppearance_Material3_TitleSmall));
-        a11yStatus = Ui.text(this, "", R.style.TextAppearance_Material3_BodyMedium);
-        a11y.addView(a11yStatus);
-        a11y.addView(Ui.text(this, getString(dev.ayushvarma.aperture.R.string.main_disclosure), R.style.TextAppearance_Material3_BodySmall));
-        Ui.button(a11y, getString(dev.ayushvarma.aperture.R.string.main_open_settings),
+        Ui.title(page, getString(dev.ayushvarma.aperture.R.string.main_setup));
+        overlayStep = new Step(page, dev.ayushvarma.aperture.R.string.main_a11y_title,
                 v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
-        LinearLayout listener = Ui.card(page);
-        listener.addView(Ui.text(this, getString(dev.ayushvarma.aperture.R.string.main_listener_title), R.style.TextAppearance_Material3_TitleSmall));
-        listenerStatus = Ui.text(this, "", R.style.TextAppearance_Material3_BodyMedium);
-        listener.addView(listenerStatus);
-        Ui.button(listener, getString(dev.ayushvarma.aperture.R.string.main_open_settings), v -> openListenerSettings());
+        overlayStep.card.addView(Ui.text(this, getString(dev.ayushvarma.aperture.R.string.main_disclosure),
+                R.style.TextAppearance_Material3_BodySmall));
+        listenerStep = new Step(page, dev.ayushvarma.aperture.R.string.main_listener_title, v -> openListenerSettings());
+        appsStep = new Step(page, dev.ayushvarma.aperture.R.string.main_apps_title,
+                v -> startActivity(new Intent(this, AppsActivity.class)));
 
-        Ui.title(page, getString(dev.ayushvarma.aperture.R.string.main_appearance));
-        LinearLayout look = Ui.card(page);
-        look.addView(Ui.text(this, getString(dev.ayushvarma.aperture.R.string.main_idle), R.style.TextAppearance_Material3_LabelLarge));
-        Ui.toggles(look, settings.idleStyle().ordinal(), labels(dev.ayushvarma.aperture.R.string.main_idle_ring,
-                dev.ayushvarma.aperture.R.string.main_idle_invisible, dev.ayushvarma.aperture.R.string.main_idle_hidden),
-                i -> settings.setEnum("idle", IslandSettings.IdleStyle.values()[i]));
-        look.addView(Ui.text(this, getString(dev.ayushvarma.aperture.R.string.main_body), R.style.TextAppearance_Material3_LabelLarge));
-        Ui.toggles(look, settings.body().ordinal(), labels(dev.ayushvarma.aperture.R.string.main_body_black,
-                dev.ayushvarma.aperture.R.string.main_body_tonal),
-                i -> settings.setEnum("body", IslandSettings.Body.values()[i]));
-        look.addView(Ui.text(this, getString(dev.ayushvarma.aperture.R.string.main_motion), R.style.TextAppearance_Material3_LabelLarge));
-        Ui.toggles(look, settings.motion().ordinal(), labels(dev.ayushvarma.aperture.R.string.main_motion_expressive,
-                dev.ayushvarma.aperture.R.string.main_motion_standard, dev.ayushvarma.aperture.R.string.main_motion_fluid),
-                i -> settings.setEnum("motion", IslandSettings.Motion.values()[i]));
-        Ui.button(look, getString(dev.ayushvarma.aperture.R.string.main_calibrate),
-                v -> startActivity(new Intent(this, CalibrationActivity.class)));
-
-        Ui.title(page, getString(dev.ayushvarma.aperture.R.string.main_behavior));
-        LinearLayout behavior = Ui.card(page);
-        toggle(behavior, dev.ayushvarma.aperture.R.string.main_show_media, "media", settings.showMedia());
-        toggle(behavior, dev.ayushvarma.aperture.R.string.main_show_notifications, "notifications", settings.showNotifications());
-        toggle(behavior, dev.ayushvarma.aperture.R.string.main_haptics, "haptics", settings.haptics());
-        TextView timeLabel = Ui.text(this, getString(dev.ayushvarma.aperture.R.string.main_notification_time,
-                settings.notificationSeconds()), R.style.TextAppearance_Material3_LabelLarge);
-        behavior.addView(timeLabel);
-        Slider time = new Slider(this);
-        time.setValueFrom(1);
-        time.setValueTo(12);
-        time.setStepSize(1);
-        time.setValue(settings.notificationSeconds());
-        time.addOnChangeListener((s, value, fromUser) -> {
-            settings.setInt("notif_seconds", Math.round(value));
-            timeLabel.setText(getString(dev.ayushvarma.aperture.R.string.main_notification_time, Math.round(value)));
-        });
-        behavior.addView(time);
-        behavior.addView(Ui.text(this, getString(dev.ayushvarma.aperture.R.string.main_double_tap), R.style.TextAppearance_Material3_LabelLarge));
-        Ui.toggles(behavior, settings.doubleTap().ordinal(), labels(dev.ayushvarma.aperture.R.string.main_double_torch,
-                dev.ayushvarma.aperture.R.string.main_double_resume, dev.ayushvarma.aperture.R.string.main_double_nothing),
-                i -> settings.setEnum("double_tap", IslandSettings.DoubleTap.values()[i]));
+        buildAppearance(page);
+        buildBehavior(page);
 
         Ui.title(page, getString(dev.ayushvarma.aperture.R.string.main_try));
         LinearLayout demo = Ui.card(page);
@@ -108,25 +121,117 @@ public final class MainActivity extends Activity {
                 v -> startActivity(new Intent(this, DeviceReportActivity.class)));
     }
 
+    private void buildBanner(LinearLayout page) {
+        banner = new MaterialCardView(this);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = Ui.dp(this, 16);
+        banner.setLayoutParams(lp);
+        banner.setStrokeWidth(Ui.dp(this, 2));
+        LinearLayout inner = new LinearLayout(this);
+        inner.setOrientation(LinearLayout.VERTICAL);
+        int pad = Ui.dp(this, 16);
+        inner.setPadding(pad, pad, pad, pad);
+        bannerTitle = Ui.text(this, "", R.style.TextAppearance_Material3_TitleMedium);
+        bannerText = Ui.text(this, "", R.style.TextAppearance_Material3_BodyMedium);
+        inner.addView(bannerTitle);
+        inner.addView(bannerText);
+        banner.addView(inner);
+        page.addView(banner);
+    }
+
+    private void buildAppearance(LinearLayout page) {
+        Ui.title(page, getString(dev.ayushvarma.aperture.R.string.main_appearance));
+        LinearLayout look = Ui.card(page);
+        label(look, dev.ayushvarma.aperture.R.string.main_idle);
+        Ui.toggles(look, settings.idleStyle().ordinal(), labels(dev.ayushvarma.aperture.R.string.main_idle_ring,
+                dev.ayushvarma.aperture.R.string.main_idle_invisible, dev.ayushvarma.aperture.R.string.main_idle_hidden),
+                i -> settings.setEnum("idle", IslandSettings.IdleStyle.values()[i]));
+        label(look, dev.ayushvarma.aperture.R.string.main_body);
+        Ui.toggles(look, settings.body().ordinal(), labels(dev.ayushvarma.aperture.R.string.main_body_black,
+                dev.ayushvarma.aperture.R.string.main_body_tonal),
+                i -> settings.setEnum("body", IslandSettings.Body.values()[i]));
+        label(look, dev.ayushvarma.aperture.R.string.main_motion);
+        Ui.toggles(look, settings.motion().ordinal(), labels(dev.ayushvarma.aperture.R.string.main_motion_expressive,
+                dev.ayushvarma.aperture.R.string.main_motion_standard, dev.ayushvarma.aperture.R.string.main_motion_fluid),
+                i -> settings.setEnum("motion", IslandSettings.Motion.values()[i]));
+        Ui.button(look, getString(dev.ayushvarma.aperture.R.string.main_calibrate),
+                v -> startActivity(new Intent(this, CalibrationActivity.class)));
+    }
+
+    private void buildBehavior(LinearLayout page) {
+        Ui.title(page, getString(dev.ayushvarma.aperture.R.string.main_behavior));
+        LinearLayout b = Ui.card(page);
+        label(b, dev.ayushvarma.aperture.R.string.main_tap);
+        Ui.toggles(b, settings.tapAction().ordinal(), labels(dev.ayushvarma.aperture.R.string.main_tap_expand,
+                dev.ayushvarma.aperture.R.string.main_tap_open),
+                i -> settings.setEnum("tap_action", IslandSettings.TapAction.values()[i]));
+        slider(b, dev.ayushvarma.aperture.R.string.main_glance, "glance_seconds", settings.glanceSeconds(), 0, 30);
+        b.addView(Ui.text(this, getString(dev.ayushvarma.aperture.R.string.main_glance_hint), R.style.TextAppearance_Material3_BodySmall));
+        label(b, dev.ayushvarma.aperture.R.string.main_lock);
+        Ui.toggles(b, settings.lockScreen().ordinal(), labels(dev.ayushvarma.aperture.R.string.main_lock_brief,
+                dev.ayushvarma.aperture.R.string.main_lock_calls),
+                i -> settings.setEnum("lock_screen", IslandSettings.LockScreen.values()[i]));
+        toggle(b, dev.ayushvarma.aperture.R.string.main_show_media, "media", settings.showMedia());
+        toggle(b, dev.ayushvarma.aperture.R.string.main_show_notifications, "notifications", settings.showNotifications());
+        b.addView(Ui.text(this, getString(dev.ayushvarma.aperture.R.string.main_notifications_hint), R.style.TextAppearance_Material3_BodySmall));
+        toggle(b, dev.ayushvarma.aperture.R.string.main_show_system, "system_events", settings.showSystemEvents());
+        toggle(b, dev.ayushvarma.aperture.R.string.main_haptics, "haptics", settings.haptics());
+        slider(b, dev.ayushvarma.aperture.R.string.main_notification_time, "notif_seconds", settings.notificationSeconds(), 1, 12);
+        label(b, dev.ayushvarma.aperture.R.string.main_double_tap);
+        Ui.toggles(b, settings.doubleTap().ordinal(), labels(dev.ayushvarma.aperture.R.string.main_double_torch,
+                dev.ayushvarma.aperture.R.string.main_double_resume, dev.ayushvarma.aperture.R.string.main_double_nothing),
+                i -> settings.setEnum("double_tap", IslandSettings.DoubleTap.values()[i]));
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
         boolean overlay = isOverlayEnabled();
         boolean listener = getSystemService(NotificationManager.class)
                 .isNotificationListenerAccessGranted(new ComponentName(this, NotificationSource.class));
-        a11yStatus.setText(overlay ? dev.ayushvarma.aperture.R.string.main_a11y_on : dev.ayushvarma.aperture.R.string.main_a11y_off);
-        listenerStatus.setText(listener ? dev.ayushvarma.aperture.R.string.main_listener_on : dev.ayushvarma.aperture.R.string.main_listener_off);
-        aapm.setVisibility(isAdvancedProtectionOn() ? TextView.VISIBLE : TextView.GONE);
+        boolean apps = settings.appsChosen();
+        overlayStep.set(overlay, overlay ? dev.ayushvarma.aperture.R.string.main_a11y_on : dev.ayushvarma.aperture.R.string.main_a11y_off,
+                overlay ? dev.ayushvarma.aperture.R.string.main_manage : dev.ayushvarma.aperture.R.string.main_grant);
+        listenerStep.set(listener, listener ? dev.ayushvarma.aperture.R.string.main_listener_on : dev.ayushvarma.aperture.R.string.main_listener_off,
+                listener ? dev.ayushvarma.aperture.R.string.main_manage : dev.ayushvarma.aperture.R.string.main_grant);
+        appsStep.set(apps, apps ? dev.ayushvarma.aperture.R.string.main_apps_done : dev.ayushvarma.aperture.R.string.main_apps_todo,
+                apps ? dev.ayushvarma.aperture.R.string.main_apps_change : dev.ayushvarma.aperture.R.string.main_apps_choose);
+        appsStep.status.setText(apps ? getString(dev.ayushvarma.aperture.R.string.main_apps_done, installedAllowed())
+                : getString(dev.ayushvarma.aperture.R.string.main_apps_todo));
+        int done = (overlay ? 1 : 0) + (listener ? 1 : 0) + (apps ? 1 : 0);
+        boolean complete = done == 3;
+        boolean night = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)
+                == Configuration.UI_MODE_NIGHT_YES;
+        int accent = complete ? GREEN : RED;
+        banner.setStrokeColor(accent);
+        banner.setCardBackgroundColor(complete ? (night ? 0xFF0F2E18 : 0xFFE6F4EA) : (night ? 0xFF3B1210 : 0xFFFCE8E6));
+        bannerTitle.setTextColor(accent);
+        bannerTitle.setText(complete ? getString(dev.ayushvarma.aperture.R.string.banner_done)
+                : getString(dev.ayushvarma.aperture.R.string.banner_todo, done));
+        bannerText.setText(complete ? dev.ayushvarma.aperture.R.string.banner_done_text : dev.ayushvarma.aperture.R.string.banner_todo_text);
+        aapm.setVisibility(isAdvancedProtectionOn() ? View.VISIBLE : View.GONE);
+        // Once both permissions are granted, go straight to the last step.
+        if (overlay && listener && !apps && !pickerOffered) {
+            pickerOffered = true;
+            startActivity(new Intent(this, AppsActivity.class));
+        }
+    }
+
+    /** Allowed apps that are actually installed (the suggested list includes apps you may not have). */
+    private int installedAllowed() {
+        int n = 0;
+        for (String pkg : settings.allowedApps()) {
+            if (getPackageManager().getLaunchIntentForPackage(pkg) != null) n++;
+        }
+        return n;
     }
 
     private boolean isOverlayEnabled() {
         ComponentName me = new ComponentName(this, IslandAccessibilityService.class);
         for (AccessibilityServiceInfo info : getSystemService(AccessibilityManager.class)
                 .getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)) {
-            if (me.flattenToString().equals(info.getId())
-                    || me.flattenToShortString().equals(info.getId())) {
-                return true;
-            }
+            if (me.flattenToString().equals(info.getId()) || me.flattenToShortString().equals(info.getId())) return true;
         }
         return false;
     }
@@ -153,12 +258,40 @@ public final class MainActivity extends Activity {
         }
     }
 
+    private void label(LinearLayout parent, int text) {
+        TextView t = Ui.text(this, getString(text), R.style.TextAppearance_Material3_LabelLarge);
+        t.setPadding(0, Ui.dp(this, 10), 0, Ui.dp(this, 4));
+        parent.addView(t);
+    }
+
     private void toggle(LinearLayout parent, int label, String key, boolean value) {
         MaterialSwitch s = new MaterialSwitch(this);
         s.setText(label);
+        s.setTypeface(Fonts.regular());
         s.setChecked(value);
         s.setOnCheckedChangeListener((b, checked) -> settings.setBoolean(key, checked));
         parent.addView(s);
+    }
+
+    private void slider(LinearLayout parent, int label, String key, int value, int from, int to) {
+        TextView t = Ui.text(this, sliderText(label, key, value), R.style.TextAppearance_Material3_LabelLarge);
+        t.setPadding(0, Ui.dp(this, 10), 0, 0);
+        parent.addView(t);
+        Slider s = new Slider(this);
+        s.setValueFrom(from);
+        s.setValueTo(to);
+        s.setStepSize(1);
+        s.setValue(Math.max(from, Math.min(to, value)));
+        s.addOnChangeListener((sl, v, fromUser) -> {
+            settings.setInt(key, Math.round(v));
+            t.setText(sliderText(label, key, Math.round(v)));
+        });
+        parent.addView(s);
+    }
+
+    private String sliderText(int label, String key, int value) {
+        if (key.equals("glance_seconds") && value == 0) return getString(dev.ayushvarma.aperture.R.string.main_glance_never);
+        return getString(label, value);
     }
 
     private CharSequence[] labels(int... ids) {

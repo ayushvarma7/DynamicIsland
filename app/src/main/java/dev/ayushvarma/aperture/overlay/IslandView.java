@@ -66,7 +66,11 @@ final class IslandView extends View {
         void holdTransient();
     }
 
-    enum Presentation { HIDDEN, IDLE, COMPACT, CARD }
+    /**
+     * HALO is the burn-in-safe resting form of a live activity: after the glance timeout the pill shrinks back to
+     * the camera ring and shows its live state as a thin moving arc, so no static bright shape stays on the OLED.
+     */
+    enum Presentation { HIDDEN, IDLE, HALO, COMPACT, CARD }
 
     /** What is drawn: a presentation plus the activity it shows. */
     private static final class Content {
@@ -128,6 +132,15 @@ final class IslandView extends View {
     private IslandState state = IslandState.EMPTY;
     private boolean expanded;
     private boolean suppressed;
+    private boolean locked;
+    private boolean haloed;
+    private String foregroundPkg;
+    private String glanceId;
+    private int glanceHash;
+    private final Runnable toHalo = () -> {
+        haloed = true;
+        retarget();
+    };
     private boolean initialized;
     private Content rendered;
     private Content pending;
@@ -181,13 +194,70 @@ final class IslandView extends View {
         if (expanded && (s.compact == null || oldCompact == null || !s.compact.id.equals(oldCompact.id))) {
             expanded = false;
         }
+        // A new or changed activity is worth a glance: show the full pill again, then time out to the halo.
+        IslandActivity c = s.compact;
+        if (c != null && (!c.id.equals(glanceId) || c.contentHash() != glanceHash)) {
+            glanceId = c.id;
+            glanceHash = c.contentHash();
+            wake();
+        }
         retarget();
     }
 
     void setExpanded(boolean e) {
         if (expanded == e) return;
         expanded = e;
+        if (!e) wake();
         retarget();
+    }
+
+    /**
+     * The app on screen. Its own activities stay off the island (music shows once you leave the player; a timer
+     * hides while you are in Clock), except an incoming call.
+     */
+    void setForegroundPackage(String pkg) {
+        if (pkg == null ? foregroundPkg == null : pkg.equals(foregroundPkg)) return;
+        foregroundPkg = pkg;
+        retarget();
+    }
+
+    private boolean onScreen(IslandActivity a) {
+        return a != null && a.kind != ActivityKind.INCOMING_CALL && a.pkg != null && a.pkg.equals(foregroundPkg);
+    }
+
+    /** The compact owner after skipping the foreground app's activities. */
+    private IslandActivity visibleCompact() {
+        if (!onScreen(state.compact)) return state.compact;
+        for (IslandActivity m : state.minimal) if (!onScreen(m)) return m;
+        return null;
+    }
+
+    private final List<IslandActivity> bubbles = new ArrayList<>();
+
+    private void updateBubbles(IslandActivity shown) {
+        bubbles.clear();
+        List<IslandActivity> all = new ArrayList<>();
+        if (state.compact != null) all.add(state.compact);
+        all.addAll(state.minimal);
+        for (IslandActivity a : all) {
+            if (a != shown && !onScreen(a) && bubbles.size() < 2) bubbles.add(a);
+        }
+    }
+
+    /** Keyguard showing: Section 6.6.6 plus the lock-screen timeout. */
+    void setLocked(boolean l) {
+        if (locked == l) return;
+        locked = l;
+        wake();
+        retarget();
+    }
+
+    /** Restarts the glance timeout (burn-in protection): the pill stays fully drawn only for a few seconds. */
+    private void wake() {
+        haloed = false;
+        removeCallbacks(toHalo);
+        int seconds = settings == null ? 0 : settings.glanceSeconds();
+        if (seconds > 0) postDelayed(toHalo, seconds * 1000L);
     }
 
     boolean isExpanded() {
@@ -227,15 +297,20 @@ final class IslandView extends View {
 
     private Content decide() {
         if (g == null || suppressed || !g.visible) return new Content(Presentation.HIDDEN, null);
-        IslandActivity t = state.transientActivity;
-        if (t != null) {
+        IslandActivity t = onScreen(state.transientActivity) ? null : state.transientActivity;
+        boolean callsOnly = locked && settings.lockScreen() == IslandSettings.LockScreen.CALLS_ONLY;
+        if (t != null && !callsOnly) {
             // System events (charging, battery) are glanceable pills; messages expand into a card.
             return new Content(t.kind == ActivityKind.SYSTEM ? Presentation.COMPACT : Presentation.CARD, t);
         }
-        IslandActivity c = state.compact;
-        if (c != null) {
-            boolean card = expanded || c.kind == ActivityKind.INCOMING_CALL;
-            return new Content(card ? Presentation.CARD : Presentation.COMPACT, c);
+        IslandActivity c = visibleCompact();
+        boolean call = c != null && (c.kind == ActivityKind.INCOMING_CALL || c.kind == ActivityKind.ONGOING_CALL);
+        if (c != null && (!callsOnly || call)) {
+            if (c.kind == ActivityKind.INCOMING_CALL) return new Content(Presentation.CARD, c);
+            if (expanded) return new Content(Presentation.CARD, c);
+            if (!haloed) return new Content(Presentation.COMPACT, c);
+            // Timed out. On the lock screen the island steps aside entirely; unlocked it rests as a halo.
+            if (!locked) return new Content(Presentation.HALO, c);
         }
         if (settings.idleStyle() == IslandSettings.IdleStyle.HIDDEN && !settings.calibrationPreview()) {
             return new Content(Presentation.HIDDEN, null);
@@ -256,6 +331,10 @@ final class IslandView extends View {
                 break;
             case COMPACT:
                 target.set(g.compactLeft(), g.compactTop(), g.compactLeft() + g.compactWidth(), g.compactTop() + hc);
+                targetRadius = hc / 2f;
+                break;
+            case HALO:
+                target.set(g.centerX - hc / 2f, g.compactTop(), g.centerX + hc / 2f, g.compactTop() + hc);
                 targetRadius = hc / 2f;
                 break;
             case IDLE:
@@ -291,9 +370,10 @@ final class IslandView extends View {
             radiusAnim.animateToFinalPosition(targetRadius);
             bodyAlphaAnim.animateToFinalPosition(alpha);
         }
-        boolean bubbles = next.presentation == Presentation.COMPACT && !state.minimal.isEmpty();
-        if (snap) bubbleScale.setValue(bubbles ? 1f : 0f);
-        else bubbleAnim.animateToFinalPosition(bubbles ? 1f : 0f);
+        updateBubbles(next.activity);
+        boolean showBubbles = next.presentation == Presentation.COMPACT && !bubbles.isEmpty();
+        if (snap) bubbleScale.setValue(showBubbles ? 1f : 0f);
+        else bubbleAnim.animateToFinalPosition(showBubbles ? 1f : 0f);
 
         if (rendered == null || next.sameSlot(rendered) || snap) {
             // Same slot (an update such as a new progress value): swap in place, no fade.
@@ -332,6 +412,7 @@ final class IslandView extends View {
         if (a == null) return g.detentSmall;
         switch (a.kind) {
             case MEDIA:
+                return g.detentLarge;
             case INCOMING_CALL:
             case ONGOING_CALL:
                 return g.detentMedium;
@@ -360,7 +441,7 @@ final class IslandView extends View {
         tmp.set(body);
         if (bubbleScale.getValue() > 0.01f) {
             float extent = g.bubbleGap + g.compactHeight;
-            tmp.left -= state.minimal.size() > 1 ? extent : 0;
+            tmp.left -= bubbles.size() > 1 ? extent : 0;
             tmp.right += extent;
         }
         tmp.inset(-slop, -slop);
@@ -412,12 +493,23 @@ final class IslandView extends View {
 
         float ca = clamp01(contentAlpha.getValue());
         if (ca < 0.01f) return;
+        if (content.presentation == Presentation.HALO) {
+            drawHalo(c, content.activity, ca);
+            postInvalidateDelayed(1000);
+            return;
+        }
         int save = c.saveLayerAlpha(body, Math.round(255 * ca));
         clip.reset();
         clip.addRoundRect(body, r, r, Path.Direction.CW);
         c.clipPath(clip);
-        if (card) drawCard(c, content.activity);
-        else drawCompact(c, content.activity);
+        if (card) {
+            drawCard(c, content.activity);
+        } else {
+            // Burn-in: shift static compact content by up to 1 px, a different offset each minute.
+            long minute = System.currentTimeMillis() / 60_000L;
+            c.translate((minute % 3) - 1, ((minute / 3) % 3) - 1);
+            drawCompact(c, content.activity);
+        }
         c.restoreToCount(save);
         scheduleTicks(content.activity, card);
     }
@@ -431,6 +523,40 @@ final class IslandView extends View {
             postInvalidateDelayed(500);
         }
         if (card && a.kind == ActivityKind.MEDIA && a.playing) postInvalidateDelayed(250);
+    }
+
+    /**
+     * Thin arc around the camera. It moves every second: progress where there is one, otherwise the seconds of
+     * the playback position, call or timer, so no pixel stays lit in one place.
+     */
+    private void drawHalo(Canvas c, IslandActivity a, float alpha) {
+        float ringR = g.cutoutRadius + g.gap / 2f;
+        float sweep;
+        float start = -90;
+        Payload p = payload(a);
+        long now = System.currentTimeMillis();
+        if (a.kind == ActivityKind.MEDIA && p != null) {
+            long pos = PlaybackMath.position(p.positionMs, p.positionUpdateElapsedMs, p.speed, a.playing,
+                    SystemClock.elapsedRealtime(), p.durationMs);
+            float f = PlaybackMath.fraction(pos, p.durationMs);
+            sweep = f >= 0 ? 360 * f : 360 * ((pos / 1000) % 60) / 60f;
+        } else if (a.progress >= 0) {
+            sweep = 360 * a.progress;
+        } else if (a.chronometerBaseMs > 0) {
+            long ms = a.countDown ? a.chronometerBaseMs - now : now - a.chronometerBaseMs;
+            sweep = 360 * ((Math.max(0, ms) / 1000) % 60) / 60f;
+        } else {
+            start = (now / 1000 % 60) * 6f - 90;
+            sweep = 30;
+        }
+        stroke.setStrokeWidth(Math.max(dp(1.5f), g.gap * 0.6f));
+        stroke.setStrokeCap(Paint.Cap.ROUND);
+        stroke.setColor(a.kind == ActivityKind.ONGOING_CALL ? palette.accept : palette.primary);
+        stroke.setAlpha(Math.round(200 * alpha));
+        tmp.set(g.centerX - ringR, g.centerY - ringR, g.centerX + ringR, g.centerY + ringR);
+        c.drawArc(tmp, start, Math.max(8, sweep), false, stroke);
+        stroke.setAlpha(255);
+        stroke.setStrokeCap(Paint.Cap.BUTT);
     }
 
     private void drawCompact(Canvas c, IslandActivity a) {
@@ -525,6 +651,10 @@ final class IslandView extends View {
 
     private void drawCard(Canvas c, IslandActivity a) {
         Payload p = payload(a);
+        if (a.kind == ActivityKind.MEDIA) {
+            drawMediaCard(c, a, p);
+            return;
+        }
         float pad = g.innerPadding;
         float hc = g.compactHeight;
         float rowTop = body.top;
@@ -555,9 +685,6 @@ final class IslandView extends View {
         float bottom = body.bottom - pad;
         float buttonH = dp(44);
         switch (a.kind) {
-            case MEDIA:
-                drawMediaControls(c, a, p, textLeft, textRight, y, bottom, buttonH);
-                break;
             case INCOMING_CALL:
                 if (p != null) {
                     float mid = (textLeft + textRight) / 2f;
@@ -591,73 +718,106 @@ final class IslandView extends View {
                 }
                 break;
             default:
+                if (a.chronometerBaseMs > 0) {
+                    // Timers and stopwatches: the time is the content, so make it the largest thing on the card.
+                    CharSequence time = trailingLabel(a);
+                    drawText(c, time, textLeft, textRight, bottom - dp(24), dp(40), palette.primary, false);
+                }
                 if (a.progress >= 0) drawBar(c, textLeft, textRight, bottom - dp(6), a.progress);
                 break;
         }
     }
 
-    private void drawMediaControls(Canvas c, IslandActivity a, Payload p, float l, float r, float y, float bottom,
-                                   float buttonH) {
+    /**
+     * Expanded player. Camera band: app icon left, live bars right (same place as the pill). Below the camera:
+     * album art with title and artist, a seekable progress bar with tabular times, then the controls.
+     */
+    private void drawMediaCard(Canvas c, IslandActivity a, Payload p) {
         if (p == null) return;
-        long now = SystemClock.elapsedRealtime();
-        long pos = PlaybackMath.position(p.positionMs, p.positionUpdateElapsedMs, p.speed, a.playing, now, p.durationMs);
+        float pad = g.innerPadding;
+        float l = body.left + pad;
+        float r = body.right - pad;
+        float band = g.compactHeight;
+        float bandCy = body.top + band / 2f;
+        float iconSize = band * 0.5f;
+        if (p.appIcon != null) drawDrawable(c, p.appIcon, l + iconSize / 2f, bandCy, iconSize);
+        if (p.appName != null) {
+            drawText(c, p.appName, l + iconSize + dp(8), g.centerX - g.keepOutRadius - dp(6), bandCy, dp(13),
+                    palette.onSurfaceVariant, false);
+        }
+        if (a.playing) drawBars(c, r - band * 0.45f, bandCy, band * 0.42f, palette.primary);
+
+        float art = dp(60);
+        float artTop = body.top + band + dp(4);
+        float artCy = artTop + art / 2f;
+        if (p.art != null) {
+            drawRoundBitmap(c, p.art, l + art / 2f, artCy, art, dp(14));
+        } else {
+            tmp.set(l, artTop, l + art, artTop + art);
+            fill.setColor(palette.buttonSecondary);
+            c.drawRoundRect(tmp, dp(14), dp(14), fill);
+            if (p.appIcon != null) drawDrawable(c, p.appIcon, l + art / 2f, artCy, art * 0.5f);
+        }
+        MediaController mc = p.controller;
+        float textL = l + art + dp(14);
+        float textR = r;
+        if (mc != null && p.customAction != null && p.customActionIcon != null) {
+            float s = dp(44);
+            textR = r - s - dp(4);
+            Drawable d = p.customActionIcon.mutate();
+            d.setTint(palette.onSurfaceVariant);
+            drawDrawable(c, d, r - s / 2f, artCy, dp(24));
+            tmp.set(r - s, artCy - s / 2f, r, artCy + s / 2f);
+            String action = p.customAction;
+            addHit(tmp, () -> mc.getTransportControls().sendCustomAction(action, null));
+        }
+        float titleTop = artCy - dp(22);
+        float next = drawTextTop(c, a.title, textL, textR, titleTop, dp(18), palette.onSurface, true);
+        drawTextTop(c, a.text, textL, textR, next + dp(2), dp(14), palette.onSurfaceVariant, false);
+
+        long pos = PlaybackMath.position(p.positionMs, p.positionUpdateElapsedMs, p.speed, a.playing,
+                SystemClock.elapsedRealtime(), p.durationMs);
         float fraction = PlaybackMath.fraction(pos, p.durationMs);
-        float barY = bottom - buttonH - dp(22);
+        float barY = artTop + art + dp(18);
+        scrubController = null;
         if (fraction >= 0) {
             // Missing duration hides the bar (Section 8): never a frozen bar.
             drawBar(c, l, r, barY, fraction);
-            text.setTypeface(palette.typeface);
-            text.setTextSize(dp(11));
-            text.setColor(palette.onSurfaceVariant);
-            text.setTextAlign(Paint.Align.LEFT);
-            c.drawText(TimeText.clock(pos), l, barY + dp(16), text);
-            text.setTextAlign(Paint.Align.RIGHT);
-            c.drawText(TimeText.clock(p.durationMs), r, barY + dp(16), text);
-            text.setTextAlign(Paint.Align.LEFT);
-            // Tapping the bar seeks (handled in onTouchEvent); remember where it is this frame.
+            float timeY = barY + dp(14);
+            drawText(c, TimeText.clock(pos), l, r, timeY, dp(12), palette.onSurfaceVariant, false);
+            drawText(c, "-" + TimeText.clock(p.durationMs - pos), l, r, timeY, dp(12), palette.onSurfaceVariant, true);
             scrubRect.set(l, barY - dp(14), r, barY + dp(14));
             scrubDuration = p.durationMs;
-            scrubController = p.controller;
+            scrubController = mc;
             scrubLeft = l;
             scrubSpan = r - l;
-        } else {
-            scrubController = null;
         }
-        MediaController mc = p.controller;
         if (mc == null) return;
         MediaController.TransportControls tc = mc.getTransportControls();
-        float cy = bottom - buttonH / 2f;
+        float button = dp(48);
+        float cy = body.bottom - pad - button / 2f;
         float mid = (l + r) / 2f;
-        float step = dp(64);
-        float s = dp(26);
+        float step = dp(76);
+        float glyph = dp(26);
         fill.setColor(palette.onSurface);
-        glyphs.next(c, mid - step, cy, s, fill, false);
-        tmp.set(mid - step - buttonH / 2, cy - buttonH / 2, mid - step + buttonH / 2, cy + buttonH / 2);
+        glyphs.next(c, mid - step, cy, glyph, fill, false);
+        tmp.set(mid - step - button / 2, cy - button / 2, mid - step + button / 2, cy + button / 2);
         addHit(tmp, tc::skipToPrevious);
         fill.setColor(palette.primaryContainer);
-        c.drawCircle(mid, cy, buttonH / 2f + dp(4), fill);
+        c.drawCircle(mid, cy, button / 2f + dp(4), fill);
         fill.setColor(palette.onPrimaryContainer);
-        if (a.playing) glyphs.pause(c, mid, cy, s, fill);
-        else glyphs.play(c, mid, cy, s, fill);
-        tmp.set(mid - buttonH / 2, cy - buttonH / 2, mid + buttonH / 2, cy + buttonH / 2);
+        if (a.playing) glyphs.pause(c, mid, cy, glyph, fill);
+        else glyphs.play(c, mid, cy, glyph, fill);
+        tmp.set(mid - button / 2, cy - button / 2, mid + button / 2, cy + button / 2);
         addHit(tmp, a.playing ? tc::pause : tc::play);
         fill.setColor(palette.onSurface);
-        glyphs.next(c, mid + step, cy, s, fill, true);
-        tmp.set(mid + step - buttonH / 2, cy - buttonH / 2, mid + step + buttonH / 2, cy + buttonH / 2);
+        glyphs.next(c, mid + step, cy, glyph, fill, true);
+        tmp.set(mid + step - button / 2, cy - button / 2, mid + step + button / 2, cy + button / 2);
         addHit(tmp, tc::skipToNext);
-        // Output switcher on the right, the app's first custom action (like/thumbs up) on the left.
         fill.setColor(palette.onSurfaceVariant);
-        glyphs.output(c, r - buttonH / 2, cy, dp(22), fill);
-        tmp.set(r - buttonH, cy - buttonH / 2, r, cy + buttonH / 2);
+        glyphs.output(c, r - button / 2, cy, dp(22), fill);
+        tmp.set(r - button, cy - button / 2, r, cy + button / 2);
         addHit(tmp, () -> actions.outputSwitcher(mc.getPackageName()));
-        if (p.customAction != null && p.customActionIcon != null) {
-            Drawable d = p.customActionIcon.mutate();
-            d.setTint(palette.onSurfaceVariant);
-            drawDrawable(c, d, l + buttonH / 2, cy, dp(24));
-            tmp.set(l, cy - buttonH / 2, l + buttonH, cy + buttonH / 2);
-            String action = p.customAction;
-            addHit(tmp, () -> tc.sendCustomAction(action, null));
-        }
     }
 
     private void button(Canvas c, float l, float t, float r, float b, int color, CharSequence label, int glyph,
@@ -683,10 +843,10 @@ final class IslandView extends View {
 
     private void drawBubbles(Canvas c) {
         float s = bubbleScale.getValue();
-        if (s < 0.01f || state.minimal.isEmpty()) return;
+        if (s < 0.01f || bubbles.isEmpty()) return;
         float hc = g.compactHeight;
-        for (int i = 0; i < state.minimal.size(); i++) {
-            IslandActivity m = state.minimal.get(i);
+        for (int i = 0; i < bubbles.size(); i++) {
+            IslandActivity m = bubbles.get(i);
             float cx = i == 0 ? body.right + g.bubbleGap + hc / 2f : body.left - g.bubbleGap - hc / 2f;
             float cy = body.centerY();
             float rr = hc / 2f * clamp01(s);
@@ -833,6 +993,7 @@ final class IslandView extends View {
         @Override
         public boolean onDown(MotionEvent e) {
             if (state.transientActivity != null) host.holdTransient();
+            wake();
             return true;
         }
 
@@ -840,6 +1001,18 @@ final class IslandView extends View {
         public boolean onSingleTapUp(MotionEvent e) {
             Content c = rendered;
             if (c == null || c.presentation == Presentation.IDLE) return false;
+            if (c.presentation == Presentation.COMPACT || c.presentation == Presentation.HALO) {
+                // Default tap = expand: reversible and keeps the user where they are; opening the app is the
+                // long-press (or swapped in settings for Apple-style behaviour).
+                Actions.haptic(IslandView.this, HapticFeedbackConstants.CONFIRM, settings.haptics());
+                if (settings.tapAction() == IslandSettings.TapAction.EXPAND && c.activity != null
+                        && c.activity.kind != ActivityKind.SYSTEM) {
+                    host.setExpanded(true);
+                } else if (c.activity != null) {
+                    open(c.activity);
+                }
+                return true;
+            }
             for (int i = hitRects.size() - 1; i >= 0; i--) {
                 if (hitRects.get(i).contains(e.getX(), e.getY())) {
                     Actions.haptic(IslandView.this, HapticFeedbackConstants.CONFIRM, settings.haptics());
@@ -866,10 +1039,12 @@ final class IslandView extends View {
 
         @Override
         public void onLongPress(MotionEvent e) {
-            if (rendered != null && rendered.presentation == Presentation.COMPACT) {
-                Actions.haptic(IslandView.this, HapticFeedbackConstants.GESTURE_START, settings.haptics());
-                host.setExpanded(true);
-            }
+            Content c = rendered;
+            if (c == null || c.activity == null) return;
+            if (c.presentation != Presentation.COMPACT && c.presentation != Presentation.HALO) return;
+            Actions.haptic(IslandView.this, HapticFeedbackConstants.LONG_PRESS, settings.haptics());
+            if (settings.tapAction() == IslandSettings.TapAction.EXPAND) open(c.activity);
+            else host.setExpanded(true);
         }
 
         @Override
@@ -877,7 +1052,7 @@ final class IslandView extends View {
             Content c = rendered;
             if (c == null) return false;
             boolean vertical = Math.abs(vy) > Math.abs(vx);
-            if (vertical && vy > 0 && c.presentation == Presentation.COMPACT) {
+            if (vertical && vy > 0 && (c.presentation == Presentation.COMPACT || c.presentation == Presentation.HALO)) {
                 Actions.haptic(IslandView.this, HapticFeedbackConstants.GESTURE_START, settings.haptics());
                 host.setExpanded(true);
             } else if (vertical && vy < 0 && c.presentation == Presentation.CARD) {

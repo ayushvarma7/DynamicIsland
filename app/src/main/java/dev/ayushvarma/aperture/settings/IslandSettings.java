@@ -3,6 +3,11 @@ package dev.ayushvarma.aperture.settings;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import dev.ayushvarma.aperture.core.geometry.Calibration;
@@ -13,6 +18,18 @@ public final class IslandSettings {
     public enum Motion { EXPRESSIVE, STANDARD, FLUID }
     public enum Body { BLACK, TONAL }
     public enum DoubleTap { FLASHLIGHT, RESUME_MEDIA, NOTHING }
+    /** What a tap on the pill does; long-press does the other. */
+    public enum TapAction { EXPAND, OPEN_APP }
+    /** Lock screen: show new events briefly then step aside, or show only calls. */
+    public enum LockScreen { BRIEF, CALLS_ONLY }
+
+    /** Pre-selected in the app picker: the apps an island is most useful for, when installed. */
+    public static final List<String> SUGGESTED_APPS = Collections.unmodifiableList(Arrays.asList(
+            "com.google.android.apps.youtube.music", "com.spotify.music", "com.google.android.youtube",
+            "com.whatsapp", "com.whatsapp.w4b", "com.google.android.apps.messaging", "com.google.android.dialer",
+            "com.google.android.deskclock", "com.google.android.apps.maps", "com.google.android.gm",
+            "org.telegram.messenger", "au.com.shiftyjelly.pocketcasts", "com.audible.application",
+            "com.amazon.mp3", "com.soundcloud.android", "com.apple.android.music", "deezer.android.app"));
 
     public interface Listener {
         void onSettingsChanged();
@@ -85,8 +102,56 @@ public final class IslandSettings {
         return DoubleTap.valueOf(prefs.getString("double_tap", DoubleTap.FLASHLIGHT.name()));
     }
 
+    /** Apps allowed to use the island. Until the user chooses, the suggested apps are allowed. */
+    public Set<String> allowedApps() {
+        return new HashSet<>(prefs.getStringSet("allowed_apps", new HashSet<>(SUGGESTED_APPS)));
+    }
+
+    public boolean isAllowed(String pkg) {
+        return pkg != null && allowedApps().contains(pkg);
+    }
+
+    public void setAllowed(String pkg, boolean allowed) {
+        Set<String> apps = allowedApps();
+        if (allowed) apps.add(pkg);
+        else apps.remove(pkg);
+        prefs.edit().putStringSet("allowed_apps", apps).apply();
+        changed();
+    }
+
+    /** True once the user has confirmed the app list in setup. */
+    public boolean appsChosen() {
+        return prefs.getBoolean("apps_chosen", false);
+    }
+
+    public void setAppsChosen() {
+        prefs.edit().putBoolean("apps_chosen", true).apply();
+        changed();
+    }
+
+    public TapAction tapAction() {
+        return TapAction.valueOf(prefs.getString("tap_action", TapAction.EXPAND.name()));
+    }
+
+    public LockScreen lockScreen() {
+        return LockScreen.valueOf(prefs.getString("lock_screen", LockScreen.BRIEF.name()));
+    }
+
+    /**
+     * Seconds a pill stays fully drawn after its last change before it shrinks into the camera halo (burn-in
+     * protection). 0 means never.
+     */
+    public int glanceSeconds() {
+        return prefs.getInt("glance_seconds", 8);
+    }
+
+    public boolean showSystemEvents() {
+        return prefs.getBoolean("system_events", false);
+    }
+
     public boolean showNotifications() {
-        return prefs.getBoolean("notifications", true);
+        // Off by default: message pop-ups are high-frequency. The island is for music, timers, deliveries and calls.
+        return prefs.getBoolean("notifications", false);
     }
 
     public boolean showMedia() {
