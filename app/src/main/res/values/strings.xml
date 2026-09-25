@@ -95,7 +95,7 @@
     <string name="main_body_tonal">Tonal</string>
     <string name="main_body_glass">Glass</string>
     <string name="main_body_clear">Clear</string>
-    <string name="main_body_artwork">Art</string>
+    <string name="main_body_artwork">Album art</string>
     <string name="main_body_hint">Black: pure OLED black. Glass: translucent, your wallpaper shows through. Clear: more see-through. Art: the album cover, blurred. Tonal: your theme\'s surface color. The small pill always stays black so it blends with the camera.</string>
     <string name="main_artwork_accent">Colors from album art</string>
     <string name="main_motion">Motion</string>

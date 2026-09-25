@@ -186,7 +186,7 @@ public final class MainActivity extends Activity {
         Ui.title(page, getString(dev.ayushvarma.aperture.R.string.main_appearance));
         LinearLayout look = Ui.card(page);
         rows.label(look, dev.ayushvarma.aperture.R.string.main_body);
-        Ui.toggles(look, settings.body().ordinal(), rows.labels(dev.ayushvarma.aperture.R.string.main_body_black,
+        Ui.chips(look, settings.body().ordinal(), rows.labels(dev.ayushvarma.aperture.R.string.main_body_black,
                 dev.ayushvarma.aperture.R.string.main_body_glass, dev.ayushvarma.aperture.R.string.main_body_clear,
                 dev.ayushvarma.aperture.R.string.main_body_artwork, dev.ayushvarma.aperture.R.string.main_body_tonal),
                 i -> settings.setEnum("body", IslandSettings.Body.values()[i]));

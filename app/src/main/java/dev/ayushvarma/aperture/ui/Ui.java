@@ -113,6 +113,33 @@ final class Ui {
         return group;
     }
 
+    /** Single-choice chips that wrap onto a second line, for choices with more options than fit a row. */
+    static com.google.android.material.chip.ChipGroup chips(LinearLayout parent, int checked, CharSequence[] labels,
+                                                              OnChoice listener) {
+        Context c = parent.getContext();
+        com.google.android.material.chip.ChipGroup group = new com.google.android.material.chip.ChipGroup(c);
+        group.setSingleSelection(true);
+        group.setSelectionRequired(true);
+        int[] ids = new int[labels.length];
+        for (int i = 0; i < labels.length; i++) {
+            com.google.android.material.chip.Chip chip = new com.google.android.material.chip.Chip(c, null,
+                    com.google.android.material.R.attr.chipStyle);
+            chip.setText(labels[i]);
+            chip.setTypeface(Fonts.medium());
+            chip.setCheckable(true);
+            ids[i] = View.generateViewId();
+            chip.setId(ids[i]);
+            group.addView(chip);
+        }
+        group.check(ids[checked]);
+        group.setOnCheckedStateChangeListener((g, checkedIds) -> {
+            if (checkedIds.isEmpty()) return;
+            for (int i = 0; i < ids.length; i++) if (ids[i] == checkedIds.get(0)) listener.onChoice(i);
+        });
+        parent.addView(group);
+        return group;
+    }
+
     interface OnChoice {
         void onChoice(int index);
     }
