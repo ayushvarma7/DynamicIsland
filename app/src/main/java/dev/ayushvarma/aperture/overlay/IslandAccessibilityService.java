@@ -40,8 +40,6 @@ import dev.ayushvarma.aperture.ui.ReplyActivity;
  */
 public final class IslandAccessibilityService extends AccessibilityService
         implements IslandView.Host, IslandEngine.Listener, IslandSettings.Listener {
-    private static final long AUTO_COLLAPSE_MS = 6_000;
-
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Set<String> cameraPackages = new HashSet<>();
     private final Set<String> inputMethods = new HashSet<>();
@@ -190,7 +188,8 @@ public final class IslandAccessibilityService extends AccessibilityService
 
     private void scheduleCollapse() {
         main.removeCallbacks(autoCollapse);
-        if (view.isExpanded()) main.postDelayed(autoCollapse, AUTO_COLLAPSE_MS);
+        int seconds = settings.expandedSeconds();
+        if (view.isExpanded() && seconds > 0) main.postDelayed(autoCollapse, seconds * 1000L);
     }
 
     // ---- IslandView.Host -----------------------------------------------------------------------------

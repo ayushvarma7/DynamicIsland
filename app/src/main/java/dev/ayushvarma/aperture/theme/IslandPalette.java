@@ -25,6 +25,8 @@ public final class IslandPalette {
     public final int accept;
     public final int keyline;
     public final int track;
+    /** The wallpaper is light (supports dark text), so translucent cards need more opacity to stay readable. */
+    public final boolean lightWallpaper;
     public final Typeface typeface;
     public final Typeface typefaceMedium;
 
@@ -43,6 +45,15 @@ public final class IslandPalette {
         accept = blend(0xFF34C759, primary, 0.15f);
         keyline = withAlpha(primary, 0.32f);
         track = withAlpha(primary, 0.24f);
+        boolean light = false;
+        try {
+            android.app.WallpaperColors wc = android.app.WallpaperManager.getInstance(ctx)
+                    .getWallpaperColors(android.app.WallpaperManager.FLAG_SYSTEM);
+            light = wc != null && (wc.getColorHints() & android.app.WallpaperColors.HINT_SUPPORTS_DARK_TEXT) != 0;
+        } catch (RuntimeException e) {
+            light = false;
+        }
+        lightWallpaper = light;
         typeface = Fonts.regular();
         typefaceMedium = Fonts.medium();
     }

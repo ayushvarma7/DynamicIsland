@@ -222,7 +222,8 @@ final class IslandView extends View {
     }
 
     private boolean onScreen(IslandActivity a) {
-        return a != null && a.kind != ActivityKind.INCOMING_CALL && a.pkg != null && a.pkg.equals(foregroundPkg);
+        return settings != null && settings.hideInForeground() && a != null && a.kind != ActivityKind.INCOMING_CALL
+                && a.pkg != null && a.pkg.equals(foregroundPkg);
     }
 
     /** The compact owner after skipping the foreground app's activities. */
@@ -248,7 +249,8 @@ final class IslandView extends View {
     void setLocked(boolean l) {
         if (locked == l) return;
         locked = l;
-        wake();
+        // Unlocking is worth a glance at what's live; locking is not (the pill must not pop up on the lock screen).
+        if (!l) wake();
         retarget();
     }
 
@@ -305,7 +307,9 @@ final class IslandView extends View {
         }
         IslandActivity c = visibleCompact();
         boolean call = c != null && (c.kind == ActivityKind.INCOMING_CALL || c.kind == ActivityKind.ONGOING_CALL);
-        if (c != null && (!callsOnly || call)) {
+        // Never music on the lock screen: the system lock-screen player already shows it.
+        boolean lockedMedia = locked && c != null && c.kind == ActivityKind.MEDIA;
+        if (c != null && !lockedMedia && (!callsOnly || call)) {
             if (c.kind == ActivityKind.INCOMING_CALL) return new Content(Presentation.CARD, c);
             if (expanded) return new Content(Presentation.CARD, c);
             if (!haloed) return new Content(Presentation.COMPACT, c);
@@ -408,11 +412,17 @@ final class IslandView extends View {
         invalidate();
     }
 
+    /** Camera band + art row + progress + controls, with 20 dp margins; never taller than the window allows. */
+    private float mediaCardHeight() {
+        float h = g.compactHeight + dp(10) + dp(64) + dp(18) + dp(28) + dp(10) + dp(56) + dp(20);
+        return Math.min(h, g.windowHeight - g.expandedTop - dp(4));
+    }
+
     private float cardHeight(IslandActivity a) {
         if (a == null) return g.detentSmall;
         switch (a.kind) {
             case MEDIA:
-                return g.detentLarge;
+                return mediaCardHeight();
             case INCOMING_CALL:
             case ONGOING_CALL:
                 return g.detentMedium;
@@ -474,13 +484,12 @@ final class IslandView extends View {
         boolean card = content != null && content.presentation == Presentation.CARD;
 
         if (a > 0.01f) {
-            fill.setColor(card ? palette.expandedBody : palette.body);
-            fill.setAlpha(Math.round(255 * a));
-            c.drawRoundRect(body, r, r, fill);
-            if (card && settings.body() == IslandSettings.Body.BLACK) {
-                stroke.setColor(palette.keyline);
-                stroke.setStrokeWidth(dp(1));
-                c.drawRoundRect(body, r, r, stroke);
+            if (card) {
+                drawCardBody(c, r, a, content.activity);
+            } else {
+                fill.setColor(palette.body);
+                fill.setAlpha(Math.round(255 * a));
+                c.drawRoundRect(body, r, r, fill);
             }
         }
         drawBubbles(c);
@@ -512,6 +521,107 @@ final class IslandView extends View {
         }
         c.restoreToCount(save);
         scheduleTicks(content.activity, card);
+    }
+
+    private final android.graphics.RenderNode blurNode = new android.graphics.RenderNode("artwork");
+    private Bitmap blurArt;
+    private int blurW;
+    private int blurH;
+
+    /**
+     * Expanded card body. Black: OLED black with a keyline. Glass: translucent with a soft top light, the
+     * wallpaper shows through. Clear: lighter still. Artwork: the album art blurred behind a dark scrim (media
+     * only; others fall back to Glass). Tonal: the Material surface color.
+     */
+    private void drawCardBody(Canvas c, float r, float alpha, IslandActivity a) {
+        IslandSettings.Body style = settings.body();
+        Payload p = payload(a);
+        if (style == IslandSettings.Body.ARTWORK && (p == null || p.art == null)) style = IslandSettings.Body.GLASS;
+        int layer = c.saveLayerAlpha(body, Math.round(255 * alpha));
+        switch (style) {
+            case GLASS:
+                translucent(c, r, 0x1C1C1E, palette.lightWallpaper ? 0.86f : 0.74f);
+                keyline(c, r, 0x2EFFFFFF);
+                break;
+            case CLEAR:
+                translucent(c, r, 0x000000, palette.lightWallpaper ? 0.78f : 0.58f);
+                keyline(c, r, 0x33FFFFFF);
+                break;
+            case ARTWORK:
+                clip.reset();
+                clip.addRoundRect(body, r, r, Path.Direction.CW);
+                c.save();
+                c.clipPath(clip);
+                drawBlurredArt(c, p.art);
+                // Contrast guard: darken just enough for white text at 4.5:1 over this cover.
+                float scrim = dev.ayushvarma.aperture.theme.ArtColors.scrimFor(
+                        dev.ayushvarma.aperture.theme.ArtColors.luminance(p.art));
+                fill.setShader(new android.graphics.LinearGradient(0, body.top, 0, body.bottom,
+                        IslandPalette.withAlpha(0xFF000000, Math.min(0.95f, scrim + 0.1f)),
+                        IslandPalette.withAlpha(0xFF000000, scrim), Shader.TileMode.CLAMP));
+                c.drawRect(body, fill);
+                fill.setShader(null);
+                c.restore();
+                keyline(c, r, 0x26FFFFFF);
+                break;
+            case TONAL:
+                fill.setColor(palette.expandedBody);
+                c.drawRoundRect(body, r, r, fill);
+                break;
+            default:
+                fill.setColor(0xFF000000);
+                c.drawRoundRect(body, r, r, fill);
+                keyline(c, r, palette.keyline);
+                break;
+        }
+        c.restoreToCount(layer);
+    }
+
+    /**
+     * Translucent card whose camera band is nearly opaque: that band sits over the status bar, so letting the
+     * clock and icons show through it would collide with our own text. Below the band it fades to {@code alpha}.
+     */
+    private void translucent(Canvas c, float r, int rgb, float alpha) {
+        float bandEnd = (body.top + g.compactHeight + dp(8) - body.top) / Math.max(1f, body.height());
+        int top = IslandPalette.withAlpha(0xFF000000 | rgb, 0.97f);
+        int low = IslandPalette.withAlpha(0xFF000000 | rgb, alpha);
+        fill.setShader(new android.graphics.LinearGradient(0, body.top, 0, body.bottom,
+                new int[]{top, top, low, low}, new float[]{0f, Math.min(0.9f, bandEnd), Math.min(0.95f, bandEnd + 0.18f), 1f},
+                Shader.TileMode.CLAMP));
+        c.drawRoundRect(body, r, r, fill);
+        fill.setShader(null);
+    }
+
+    private void keyline(Canvas c, float r, int color) {
+        stroke.setColor(color);
+        stroke.setStrokeWidth(dp(1));
+        tmp.set(body);
+        tmp.inset(dp(0.5f), dp(0.5f));
+        c.drawRoundRect(tmp, r, r, stroke);
+    }
+
+    /** A real GPU blur (RenderEffect) of the album art, cover-cropped to the card; recorded only when it changes. */
+    private void drawBlurredArt(Canvas c, Bitmap art) {
+        int w = Math.max(1, Math.round(body.width()));
+        int h = Math.max(1, Math.round(body.height()));
+        if (art != blurArt || w != blurW || h != blurH) {
+            blurArt = art;
+            blurW = w;
+            blurH = h;
+            blurNode.setPosition(0, 0, w, h);
+            blurNode.setRenderEffect(android.graphics.RenderEffect.createBlurEffect(dp(40), dp(40), Shader.TileMode.CLAMP));
+            Canvas rc = blurNode.beginRecording();
+            float scale = Math.max(w / (float) art.getWidth(), h / (float) art.getHeight()) * 1.2f;
+            matrix.setScale(scale, scale);
+            matrix.postTranslate((w - art.getWidth() * scale) / 2f, (h - art.getHeight() * scale) / 2f);
+            rc.drawBitmap(art, matrix, image);
+            blurNode.endRecording();
+        }
+        if (!c.isHardwareAccelerated()) return;
+        c.save();
+        c.translate(body.left, body.top);
+        c.drawRenderNode(blurNode);
+        c.restore();
     }
 
     /** Redraw only while something visibly changes (Section 12: zero idle wakeups). */
@@ -734,90 +844,102 @@ final class IslandView extends View {
      */
     private void drawMediaCard(Canvas c, IslandActivity a, Payload p) {
         if (p == null) return;
-        float pad = g.innerPadding;
+        float pad = dp(20);
         float l = body.left + pad;
         float r = body.right - pad;
+        int accent = settings.artworkAccent() ? dev.ayushvarma.aperture.theme.ArtColors.accent(p.art, palette.primary)
+                : palette.primary;
+
+        // Camera band: which app, left of the camera; live bars right of it (same place as the pill).
         float band = g.compactHeight;
         float bandCy = body.top + band / 2f;
-        float iconSize = band * 0.5f;
-        if (p.appIcon != null) drawDrawable(c, p.appIcon, l + iconSize / 2f, bandCy, iconSize);
+        float icon = dp(18);
+        if (p.appIcon != null) drawDrawable(c, p.appIcon, l + icon / 2f, bandCy, icon);
         if (p.appName != null) {
-            drawText(c, p.appName, l + iconSize + dp(8), g.centerX - g.keepOutRadius - dp(6), bandCy, dp(13),
-                    palette.onSurfaceVariant, false);
+            drawText(c, p.appName, l + icon + dp(8), g.centerX - g.keepOutRadius - dp(6), bandCy, dp(13),
+                    IslandPalette.withAlpha(palette.onSurface, 0.6f), false);
         }
-        if (a.playing) drawBars(c, r - band * 0.45f, bandCy, band * 0.42f, palette.primary);
+        if (a.playing) drawBars(c, r - dp(14), bandCy, dp(16), accent);
 
-        float art = dp(60);
-        float artTop = body.top + band + dp(4);
+        // Art and titles.
+        float art = dp(64);
+        float artTop = body.top + band + dp(10);
         float artCy = artTop + art / 2f;
         if (p.art != null) {
             drawRoundBitmap(c, p.art, l + art / 2f, artCy, art, dp(14));
         } else {
             tmp.set(l, artTop, l + art, artTop + art);
-            fill.setColor(palette.buttonSecondary);
+            fill.setColor(0x33FFFFFF);
             c.drawRoundRect(tmp, dp(14), dp(14), fill);
-            if (p.appIcon != null) drawDrawable(c, p.appIcon, l + art / 2f, artCy, art * 0.5f);
+            if (p.appIcon != null) drawDrawable(c, p.appIcon, l + art / 2f, artCy, art * 0.45f);
         }
-        MediaController mc = p.controller;
-        float textL = l + art + dp(14);
-        float textR = r;
-        if (mc != null && p.customAction != null && p.customActionIcon != null) {
-            float s = dp(44);
-            textR = r - s - dp(4);
-            Drawable d = p.customActionIcon.mutate();
-            d.setTint(palette.onSurfaceVariant);
-            drawDrawable(c, d, r - s / 2f, artCy, dp(24));
-            tmp.set(r - s, artCy - s / 2f, r, artCy + s / 2f);
-            String action = p.customAction;
-            addHit(tmp, () -> mc.getTransportControls().sendCustomAction(action, null));
-        }
-        float titleTop = artCy - dp(22);
-        float next = drawTextTop(c, a.title, textL, textR, titleTop, dp(18), palette.onSurface, true);
-        drawTextTop(c, a.text, textL, textR, next + dp(2), dp(14), palette.onSurfaceVariant, false);
+        float textL = l + art + dp(16);
+        float titleBottom = drawTextTop(c, a.title, textL, r, artCy - dp(24), dp(20), 0xFFFFFFFF, true);
+        drawTextTop(c, a.text, textL, r, titleBottom + dp(2), dp(15), 0xB3FFFFFF, false);
 
+        // Progress: 6 dp track, accent fill, position dot, times tight underneath. Hidden without a duration.
         long pos = PlaybackMath.position(p.positionMs, p.positionUpdateElapsedMs, p.speed, a.playing,
                 SystemClock.elapsedRealtime(), p.durationMs);
         float fraction = PlaybackMath.fraction(pos, p.durationMs);
-        float barY = artTop + art + dp(18);
+        float barY = artTop + art + dp(22);
+        MediaController mc = p.controller;
         scrubController = null;
         if (fraction >= 0) {
-            // Missing duration hides the bar (Section 8): never a frozen bar.
-            drawBar(c, l, r, barY, fraction);
-            float timeY = barY + dp(14);
-            drawText(c, TimeText.clock(pos), l, r, timeY, dp(12), palette.onSurfaceVariant, false);
-            drawText(c, "-" + TimeText.clock(p.durationMs - pos), l, r, timeY, dp(12), palette.onSurfaceVariant, true);
-            scrubRect.set(l, barY - dp(14), r, barY + dp(14));
+            float h = dp(6);
+            tmp.set(l, barY - h / 2, r, barY + h / 2);
+            fill.setColor(0x33FFFFFF);
+            c.drawRoundRect(tmp, h / 2, h / 2, fill);
+            float x = l + (r - l) * fraction;
+            tmp.right = Math.max(l + h, x);
+            fill.setColor(accent);
+            c.drawRoundRect(tmp, h / 2, h / 2, fill);
+            c.drawCircle(x, barY, dp(6), fill);
+            float timeY = barY + dp(16);
+            drawText(c, TimeText.clock(pos), l, r, timeY, dp(12), 0x99FFFFFF, false);
+            drawText(c, "-" + TimeText.clock(p.durationMs - pos), l, r, timeY, dp(12), 0x99FFFFFF, true);
+            scrubRect.set(l, barY - dp(16), r, barY + dp(16));
             scrubDuration = p.durationMs;
             scrubController = mc;
             scrubLeft = l;
             scrubSpan = r - l;
         }
         if (mc == null) return;
+
+        // Controls: [like]  prev  PLAY  next  [output], evenly weighted around the center.
         MediaController.TransportControls tc = mc.getTransportControls();
-        float button = dp(48);
-        float cy = body.bottom - pad - button / 2f;
+        float cy = body.bottom - pad - dp(28);
         float mid = (l + r) / 2f;
-        float step = dp(76);
-        float glyph = dp(26);
-        fill.setColor(palette.onSurface);
+        float step = dp(72);
+        float glyph = dp(28);
+        float hit = dp(48);
+        fill.setColor(0xFFFFFFFF);
         glyphs.next(c, mid - step, cy, glyph, fill, false);
-        tmp.set(mid - step - button / 2, cy - button / 2, mid - step + button / 2, cy + button / 2);
+        tmp.set(mid - step - hit / 2, cy - hit / 2, mid - step + hit / 2, cy + hit / 2);
         addHit(tmp, tc::skipToPrevious);
-        fill.setColor(palette.primaryContainer);
-        c.drawCircle(mid, cy, button / 2f + dp(4), fill);
-        fill.setColor(palette.onPrimaryContainer);
-        if (a.playing) glyphs.pause(c, mid, cy, glyph, fill);
-        else glyphs.play(c, mid, cy, glyph, fill);
-        tmp.set(mid - button / 2, cy - button / 2, mid + button / 2, cy + button / 2);
+        fill.setColor(accent);
+        c.drawCircle(mid, cy, dp(28), fill);
+        fill.setColor(dev.ayushvarma.aperture.theme.ArtColors.onAccent(accent));
+        if (a.playing) glyphs.pause(c, mid, cy, dp(24), fill);
+        else glyphs.play(c, mid + dp(2), cy, dp(26), fill);
+        tmp.set(mid - dp(28), cy - dp(28), mid + dp(28), cy + dp(28));
         addHit(tmp, a.playing ? tc::pause : tc::play);
-        fill.setColor(palette.onSurface);
+        fill.setColor(0xFFFFFFFF);
         glyphs.next(c, mid + step, cy, glyph, fill, true);
-        tmp.set(mid + step - button / 2, cy - button / 2, mid + step + button / 2, cy + button / 2);
+        tmp.set(mid + step - hit / 2, cy - hit / 2, mid + step + hit / 2, cy + hit / 2);
         addHit(tmp, tc::skipToNext);
-        fill.setColor(palette.onSurfaceVariant);
-        glyphs.output(c, r - button / 2, cy, dp(22), fill);
-        tmp.set(r - button, cy - button / 2, r, cy + button / 2);
+
+        fill.setColor(0xB3FFFFFF);
+        glyphs.cast(c, r - hit / 2, cy, dp(22), fill);
+        tmp.set(r - hit, cy - hit / 2, r, cy + hit / 2);
         addHit(tmp, () -> actions.outputSwitcher(mc.getPackageName()));
+        if (p.customAction != null && p.customActionIcon != null) {
+            Drawable d = p.customActionIcon.mutate();
+            d.setTint(0xB3FFFFFF);
+            drawDrawable(c, d, l + hit / 2, cy, dp(24));
+            tmp.set(l, cy - hit / 2, l + hit, cy + hit / 2);
+            String action = p.customAction;
+            addHit(tmp, () -> tc.sendCustomAction(action, null));
+        }
     }
 
     private void button(Canvas c, float l, float t, float r, float b, int color, CharSequence label, int glyph,
@@ -975,7 +1097,7 @@ final class IslandView extends View {
     @Override
     public boolean onTouchEvent(MotionEvent e) {
         if (e.getActionMasked() == MotionEvent.ACTION_OUTSIDE) {
-            if (expanded) host.setExpanded(false);
+            if (expanded && settings.collapseOnOutsideTouch()) host.setExpanded(false);
             return false;
         }
         if (e.getActionMasked() == MotionEvent.ACTION_UP && scrubController != null && rendered != null
@@ -1059,9 +1181,17 @@ final class IslandView extends View {
                 Actions.haptic(IslandView.this, HapticFeedbackConstants.GESTURE_END, settings.haptics());
                 if (state.transientActivity != null) host.dismissTransient();
                 else host.setExpanded(false);
-            } else if (!vertical && c.presentation == Presentation.COMPACT) {
+            } else if (!vertical && (c.presentation == Presentation.COMPACT || c.presentation == Presentation.HALO)) {
                 Actions.haptic(IslandView.this, HapticFeedbackConstants.SEGMENT_TICK, settings.haptics());
-                host.cycle(vx < 0 ? 1 : -1);
+                Payload p = payload(c.activity);
+                if (settings.swipeChangesSong() && c.activity != null && c.activity.kind == ActivityKind.MEDIA
+                        && p != null && p.controller != null) {
+                    // Swipe left = next track, right = previous, like flicking a record.
+                    if (vx < 0) p.controller.getTransportControls().skipToNext();
+                    else p.controller.getTransportControls().skipToPrevious();
+                } else {
+                    host.cycle(vx < 0 ? 1 : -1);
+                }
             } else if (!vertical && c.presentation == Presentation.CARD && state.transientActivity != null) {
                 Actions.haptic(IslandView.this, HapticFeedbackConstants.REJECT, settings.haptics());
                 Payload p = payload(state.transientActivity);

@@ -91,4 +91,18 @@ final class Glyphs {
         p.setStyle(old);
         p.setStrokeWidth(oldW);
     }
+
+    /** Output device: a speaker cabinet (rounded outline with a woofer and a tweeter). */
+    void cast(Canvas c, float cx, float cy, float s, Paint p) {
+        Paint.Style old = p.getStyle();
+        float oldW = p.getStrokeWidth();
+        p.setStyle(Paint.Style.STROKE);
+        p.setStrokeWidth(s * 0.09f);
+        tmp.set(cx - s * 0.32f, cy - s * 0.44f, cx + s * 0.32f, cy + s * 0.44f);
+        c.drawRoundRect(tmp, s * 0.12f, s * 0.12f, p);
+        c.drawCircle(cx, cy + s * 0.12f, s * 0.15f, p);
+        p.setStyle(old);
+        p.setStrokeWidth(oldW);
+        c.drawCircle(cx, cy - s * 0.24f, s * 0.06f, p);
+    }
 }
