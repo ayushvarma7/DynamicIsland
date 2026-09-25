@@ -1,0 +1,4 @@
+// Versions checked at the source on 2026-09-25 (docs/RESEARCH.md, section 3).
+plugins {
+    id 'com.android.application' version '9.4.1' apply false
+}
