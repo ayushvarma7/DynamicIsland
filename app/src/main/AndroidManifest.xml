@@ -13,6 +13,11 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
+        <!-- Home apps, so leaving an app for the home screen is recognised as an app switch. -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.HOME" />
+        </intent>
         <!-- Camera apps, for auto-hide. -->
         <intent>
             <action android:name="android.media.action.IMAGE_CAPTURE" />

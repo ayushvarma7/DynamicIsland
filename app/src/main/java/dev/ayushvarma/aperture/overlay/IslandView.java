@@ -198,14 +198,26 @@ public final class IslandView extends View {
         if (expanded && (s.compact == null || oldCompact == null || !s.compact.id.equals(oldCompact.id))) {
             expanded = false;
         }
-        // A new or changed activity is worth a glance: show the full pill again, then time out to the halo.
-        IslandActivity c = s.compact;
-        if (c != null && (!c.id.equals(glanceId) || c.contentHash() != glanceHash)) {
+        glanceIfNew();
+        retarget();
+    }
+
+    /**
+     * A new or changed activity is worth a glance: show the full pill again, then time out to the halo. Tracks the
+     * activity the user can actually see, so music hidden while its player is open (and timing out meanwhile)
+     * glances again the moment the user leaves the player, instead of coming back as a bare ring.
+     */
+    private void glanceIfNew() {
+        IslandActivity c = visibleCompact();
+        if (c == null) {
+            glanceId = null;
+            return;
+        }
+        if (!c.id.equals(glanceId) || c.contentHash() != glanceHash) {
             glanceId = c.id;
             glanceHash = c.contentHash();
             wake();
         }
-        retarget();
     }
 
     public void setExpanded(boolean e) {
@@ -222,6 +234,7 @@ public final class IslandView extends View {
     void setForegroundPackage(String pkg) {
         if (pkg == null ? foregroundPkg == null : pkg.equals(foregroundPkg)) return;
         foregroundPkg = pkg;
+        glanceIfNew();
         retarget();
     }
 
@@ -270,10 +283,31 @@ public final class IslandView extends View {
         return expanded;
     }
 
+    /** One line per input to {@link #decide()}, for {@code dumpsys}: why the island shows what it shows. */
+    String debugState() {
+        StringBuilder b = new StringBuilder();
+        b.append("presentation=").append(rendered == null ? "none" : rendered.presentation)
+                .append(" activity=").append(rendered == null || rendered.activity == null ? "-" : rendered.activity.id).append('\n');
+        b.append("foreground=").append(foregroundPkg).append(" locked=").append(locked).append(" suppressed=").append(suppressed)
+                .append(" expanded=").append(expanded).append(" haloed=").append(haloed).append('\n');
+        if (state != null) {
+            b.append("compact=").append(describe(state.compact)).append('\n');
+            for (IslandActivity m : state.minimal) b.append("minimal=").append(describe(m)).append('\n');
+            b.append("transient=").append(describe(state.transientActivity)).append('\n');
+        }
+        return b.toString();
+    }
+
+    private String describe(IslandActivity a) {
+        if (a == null) return "-";
+        return a.id + " kind=" + a.kind + " pkg=" + a.pkg + " playing=" + a.playing + " onScreen=" + onScreen(a);
+    }
+
     /** Fullscreen, camera app, landscape: the island steps aside (Section 6.6.5). */
     void setSuppressed(boolean s) {
         if (suppressed == s) return;
         suppressed = s;
+        if (!s) wake();
         retarget();
     }
 

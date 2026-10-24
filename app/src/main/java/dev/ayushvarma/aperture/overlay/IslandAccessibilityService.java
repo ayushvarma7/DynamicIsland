@@ -1,6 +1,7 @@
 package dev.ayushvarma.aperture.overlay;
 
 import android.accessibilityservice.AccessibilityService;
+import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
@@ -50,16 +51,26 @@ public final class IslandAccessibilityService extends AccessibilityService
     private IslandView view;
     private Actions actions;
     private SystemEvents systemEvents;
+    private final Runnable lockReread = this::updateLocked;
     private final android.content.BroadcastReceiver screenReceiver = new android.content.BroadcastReceiver() {
         @Override
         public void onReceive(android.content.Context c, Intent i) {
             updateLocked();
+            // The keyguard can go away a moment after the screen turns on (face unlock, Smart Lock) without a
+            // later broadcast we can rely on, and a stale "locked" hides music. Look again shortly after.
+            if (Intent.ACTION_SCREEN_ON.equals(i.getAction())) {
+                main.removeCallbacks(lockReread);
+                main.postDelayed(lockReread, 600);
+                main.postDelayed(lockReread, 2000);
+            }
         }
     };
     private IslandHub hub;
     private IslandSettings settings;
     private WindowInsets lastInsets;
     private boolean cameraForeground;
+    private final java.util.Map<String, Boolean> activityWindows = new java.util.HashMap<>();
+    private final java.util.ArrayDeque<String> recentEvents = new java.util.ArrayDeque<>();
 
     @Override
     protected void onServiceConnected() {
@@ -126,15 +137,38 @@ public final class IslandAccessibilityService extends AccessibilityService
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event.getEventType() != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED || event.getPackageName() == null) return;
+        // Unlocking always brings a window to the front, so every window change re-reads the real lock state too.
+        updateLocked();
         String pkg = event.getPackageName().toString();
         // The shade, dialogs, the keyboard and our own settings screens don't change which app the user is in.
         if (pkg.equals("com.android.systemui") || pkg.equals(getPackageName()) || inputMethods.contains(pkg)) return;
+        // Popups, dialogs, toasts and other apps' overlays also send window-state events. Only a real activity
+        // coming to the front changes the foreground app; otherwise a stray event could leave music hidden as if
+        // its player were still open.
+        boolean activity = isActivity(pkg, event.getClassName());
+        recentEvents.addLast(pkg + " " + event.getClassName() + (activity ? " -> foreground" : " (ignored)"));
+        if (recentEvents.size() > 12) recentEvents.removeFirst();
+        if (!activity) return;
         view.setForegroundPackage(pkg);
         boolean camera = cameraPackages.contains(pkg);
         if (camera != cameraForeground) {
             cameraForeground = camera;
             updateSuppression();
         }
+    }
+
+    /** {@code adb shell dumpsys activity service dev.ayushvarma.aperture/.overlay.IslandAccessibilityService} */
+    @Override
+    protected void dump(java.io.FileDescriptor fd, java.io.PrintWriter pw, String[] args) {
+        if (view == null) {
+            pw.println("not connected");
+            return;
+        }
+        pw.println("keyguardLocked=" + getSystemService(android.app.KeyguardManager.class).isKeyguardLocked()
+                + " cameraForeground=" + cameraForeground);
+        pw.print(view.debugState());
+        pw.println("recent window events:");
+        for (String e : recentEvents) pw.println("  " + e);
     }
 
     @Override
@@ -178,6 +212,34 @@ public final class IslandAccessibilityService extends AccessibilityService
             if (view.isAttachedToWindow()) wm.updateViewLayout(view, lp);
         }
         view.configure(g, palette, settings);
+    }
+
+    /**
+     * Whether a window-state event comes from an activity window, cached per class. Only a window that is provably
+     * not an activity is ignored: when package visibility hides the app from us, the event is trusted, because
+     * missing a real app switch is worse than counting a popup.
+     */
+    private boolean isActivity(String pkg, CharSequence cls) {
+        if (cls == null) return true; // nothing to check against; trust the event
+        String key = pkg + "/" + cls;
+        Boolean known = activityWindows.get(key);
+        if (known == null) {
+            PackageManager pm = getPackageManager();
+            try {
+                pm.getActivityInfo(new ComponentName(pkg, cls.toString()), 0);
+                known = true;
+            } catch (PackageManager.NameNotFoundException notAnActivity) {
+                try {
+                    pm.getPackageInfo(pkg, 0);
+                    known = false; // the app is visible to us and has no such activity: a popup, dialog or overlay
+                } catch (PackageManager.NameNotFoundException hidden) {
+                    known = true;
+                }
+            }
+            if (activityWindows.size() > 256) activityWindows.clear();
+            activityWindows.put(key, known);
+        }
+        return known;
     }
 
     private void updateLocked() {
