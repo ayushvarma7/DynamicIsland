@@ -15,6 +15,7 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.Icon;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.provider.Settings;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
@@ -31,6 +32,7 @@ import dev.ayushvarma.aperture.IslandHub;
 import dev.ayushvarma.aperture.R;
 import dev.ayushvarma.aperture.core.engine.ActivityKind;
 import dev.ayushvarma.aperture.core.engine.IslandActivity;
+import dev.ayushvarma.aperture.core.format.TimeText;
 import dev.ayushvarma.aperture.settings.IslandSettings;
 
 /**
@@ -141,20 +143,23 @@ public final class NotificationSource extends NotificationListenerService implem
         }
 
         boolean promoted = (Build.VERSION.SDK_INT >= 36 && (n.flags & Notification.FLAG_PROMOTED_ONGOING) != 0)
-                || template.endsWith("ProgressStyle");
-        boolean chronometer = ex.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER);
-        boolean countDown = ex.getBoolean(Notification.EXTRA_CHRONOMETER_COUNT_DOWN);
+                || template.endsWith("ProgressStyle") || template.endsWith("MetricStyle");
+        MetricInfo metric = template.endsWith("MetricStyle") ? metric(n) : null;
+        boolean chronometer = ex.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER) || (metric != null && metric.baseMs > 0);
+        boolean countDown = metric != null && metric.baseMs > 0 ? metric.countDown
+                : ex.getBoolean(Notification.EXTRA_CHRONOMETER_COUNT_DOWN);
         int max = ex.getInt(Notification.EXTRA_PROGRESS_MAX, 0);
         boolean ongoing = (n.flags & Notification.FLAG_ONGOING_EVENT) != 0;
         if (promoted || ongoing) {
             ActivityKind kind;
             if (Notification.CATEGORY_ALARM.equals(n.category) && n.fullScreenIntent != null) kind = ActivityKind.ALARM;
+            else if (metric != null && metric.time) kind = metric.countDown ? ActivityKind.TIMER : ActivityKind.STOPWATCH;
             else if (chronometer && countDown) kind = ActivityKind.TIMER;
             else if (chronometer && CLOCK_PKG.equals(sbn.getPackageName())) kind = ActivityKind.STOPWATCH;
             else if (promoted) kind = ActivityKind.LIVE_UPDATE;
             else if (max > 0) kind = ActivityKind.DOWNLOAD;
             else return; // ordinary foreground-service notifications stay off the island
-            publishPersistent(sbn, n, kind, chronometer, countDown, now);
+            publishPersistent(sbn, n, kind, chronometer, countDown, metric, now);
             return;
         }
 
@@ -203,10 +208,17 @@ public final class NotificationSource extends NotificationListenerService implem
     }
 
     private void publishPersistent(StatusBarNotification sbn, Notification n, ActivityKind kind, boolean chronometer,
-                                   boolean countDown, long now) {
+                                   boolean countDown, MetricInfo metric, long now) {
         Payload p = base(sbn, n);
         CharSequence[] tt = titleText(n);
         Bundle ex = n.extras;
+        CharSequence shortText = ex.getCharSequence(EXTRA_SHORT_CRITICAL_TEXT);
+        if (metric != null) {
+            // MetricStyle posts no title or text: the metric's label ("Pasta") and value carry the meaning.
+            if (tt[0] == null) tt[0] = metric.label;
+            if (shortText == null) shortText = metric.text;
+        }
+        long chronometerBase = !chronometer ? 0 : metric != null && metric.baseMs > 0 ? metric.baseMs : n.when;
         int max = ex.getInt(Notification.EXTRA_PROGRESS_MAX, 0);
         int progress = ex.getInt(Notification.EXTRA_PROGRESS, 0);
         boolean indeterminate = ex.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE);
@@ -215,8 +227,8 @@ public final class NotificationSource extends NotificationListenerService implem
         keyToId.put(sbn.getKey(), id);
         IslandActivity prev = hub.engine().get(id);
         hub.upsert(IslandActivity.builder(id, sbn.getPackageName(), kind)
-                .title(tt[0]).text(tt[1]).shortText(ex.getCharSequence(EXTRA_SHORT_CRITICAL_TEXT))
-                .progress(fraction).chronometer(chronometer ? n.when : 0, countDown).accentColor(n.color)
+                .title(tt[0]).text(tt[1]).shortText(shortText)
+                .progress(fraction).chronometer(chronometerBase, countDown).accentColor(n.color)
                 .payload(p).createdAt(prev == null ? now : prev.createdAt).updatedAt(now).build());
     }
 
@@ -253,6 +265,77 @@ public final class NotificationSource extends NotificationListenerService implem
                         incoming ? ActivityKind.INCOMING_CALL : ActivityKind.ONGOING_CALL)
                 .title(caller).text(tt[1]).chronometer(incoming ? 0 : n.when, false)
                 .payload(p).createdAt(prev == null ? now : prev.createdAt).updatedAt(now).build());
+    }
+
+    /** The metric an Android 17 MetricStyle notification leads with, as plain island data. */
+    private static final class MetricInfo {
+        CharSequence label;
+        /** Wall-clock zero of a running timer (when it ends) or stopwatch (when it started); 0 if not running. */
+        long baseMs;
+        boolean countDown;
+        /** True for timers and stopwatches, running or paused. */
+        boolean time;
+        /** Display text for anything that doesn't tick: a paused time, a number, a word, a date. */
+        CharSequence text;
+    }
+
+    /**
+     * Android 17 MetricStyle: Google Clock posts timers and stopwatches this way, with no title, text or
+     * chronometer extras. Reads the critical metric (or the first one) through the public API.
+     */
+    private MetricInfo metric(Notification n) {
+        if (Build.VERSION.SDK_INT < 37) return null;
+        try {
+            Notification.Style style = Notification.Builder.recoverBuilder(this, n).getStyle();
+            if (!(style instanceof Notification.MetricStyle)) return null;
+            Notification.MetricStyle ms = (Notification.MetricStyle) style;
+            Notification.Metric m = ms.getCriticalMetric();
+            if (m == null && !ms.getMetrics().isEmpty()) m = ms.getMetrics().get(0);
+            if (m == null) return null;
+            MetricInfo info = new MetricInfo();
+            info.label = m.getLabel();
+            Notification.Metric.MetricValue v = m.getValue();
+            if (v instanceof Notification.Metric.TimeDifference) {
+                Notification.Metric.TimeDifference t = (Notification.Metric.TimeDifference) v;
+                info.time = true;
+                info.countDown = t.isTimer();
+                java.time.Duration paused = t.getPausedDuration();
+                if (paused != null) {
+                    long ms0 = paused.toMillis();
+                    info.text = t.isTimer() ? TimeText.countdown(ms0) : TimeText.clock(ms0);
+                } else if (t.getZeroTime() != null) {
+                    info.baseMs = t.getZeroTime().toEpochMilli();
+                } else if (t.getZeroElapsedRealtime() != null) {
+                    info.baseMs = System.currentTimeMillis() + (t.getZeroElapsedRealtime() - SystemClock.elapsedRealtime());
+                }
+            } else if (v instanceof Notification.Metric.FixedText) {
+                Notification.Metric.FixedText t = (Notification.Metric.FixedText) v;
+                info.text = withUnit(t.getValue(), t.getUnit());
+            } else if (v instanceof Notification.Metric.FixedInt) {
+                Notification.Metric.FixedInt t = (Notification.Metric.FixedInt) v;
+                info.text = withUnit(String.valueOf(t.getValue()), t.getUnit());
+            } else if (v instanceof Notification.Metric.FixedFloat) {
+                Notification.Metric.FixedFloat t = (Notification.Metric.FixedFloat) v;
+                java.text.NumberFormat f = java.text.NumberFormat.getNumberInstance();
+                f.setMinimumFractionDigits(t.getMinFractionDigits());
+                f.setMaximumFractionDigits(t.getMaxFractionDigits());
+                info.text = withUnit(f.format(t.getValue()), t.getUnit());
+            } else if (v instanceof Notification.Metric.FixedTime) {
+                info.text = java.time.format.DateTimeFormatter.ofLocalizedTime(java.time.format.FormatStyle.SHORT)
+                        .format(((Notification.Metric.FixedTime) v).getValue());
+            } else if (v instanceof Notification.Metric.FixedDate) {
+                info.text = java.time.format.DateTimeFormatter.ofLocalizedDate(java.time.format.FormatStyle.MEDIUM)
+                        .format(((Notification.Metric.FixedDate) v).getValue());
+            }
+            return info;
+        } catch (RuntimeException e) {
+            return null; // a malformed style: fall back to the plain extras
+        }
+    }
+
+    private static CharSequence withUnit(CharSequence value, CharSequence unit) {
+        if (value == null) return null;
+        return unit == null || unit.length() == 0 ? value : value + " " + unit;
     }
 
     /** Title and body, preferring the latest message for MessagingStyle (WhatsApp, Messages, Telegram...). */
