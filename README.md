@@ -3,6 +3,16 @@
 A Pixel-native dynamic island around your front camera. Free, no ads, no internet permission, written in Java.
 
 <p align="center">
+  <img src="docs/media/hero.jpg" width="100%" alt="Your music, around your camera: the Aperture island open as a Spotify player around the front camera of a Pixel">
+</p>
+
+## Watch the launch video
+
+https://github.com/user-attachments/assets/214e1025-9188-4137-90a2-da07fc8b0eea
+
+## See it in motion
+
+<p align="center">
   <img src="docs/media/island.gif" width="540" alt="Tapping the island on a Pixel 8: the ring around the camera springs open into a music card, then folds back into a compact pill">
 </p>
 
