@@ -176,6 +176,8 @@
     <string name="main_demo_notification">Message</string>
     <string name="main_demo_timer">Timer</string>
     <string name="main_demo_charging">Charging</string>
+    <string name="main_demo_call">Call</string>
+    <string name="demo_caller">Alex</string>
     <string name="demo_sender">Aperture</string>
     <string name="demo_message">This is how a message from WhatsApp will look. Swipe up to dismiss.</string>
     <string name="demo_timer">Timer</string>

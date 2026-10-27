@@ -212,6 +212,7 @@ public final class NotificationSource extends NotificationListenerService implem
         Payload p = base(sbn, n);
         CharSequence[] tt = titleText(n);
         Bundle ex = n.extras;
+        p.actions = plainActions(n);
         CharSequence shortText = ex.getCharSequence(EXTRA_SHORT_CRITICAL_TEXT);
         if (metric != null) {
             // MetricStyle posts no title or text: the metric's label ("Pasta") and value carry the meaning.
@@ -382,7 +383,24 @@ public final class NotificationSource extends NotificationListenerService implem
         }
         Icon large = n.getLargeIcon();
         if (large != null) p.art = bitmapOf(large);
+        if (n.getSmallIcon() != null) {
+            Drawable mark = n.getSmallIcon().loadDrawable(this);
+            if (mark != null) p.smallIcon = mark.mutate();
+        }
         return p;
+    }
+
+    /** The app's own buttons, minus inline replies (those get the Reply button); at most two fit a card. */
+    private static java.util.List<Notification.Action> plainActions(Notification n) {
+        java.util.List<Notification.Action> out = new java.util.ArrayList<>();
+        if (n.actions == null) return out;
+        for (Notification.Action a : n.actions) {
+            if (a == null || a.actionIntent == null || a.title == null) continue;
+            if (a.getRemoteInputs() != null && a.getRemoteInputs().length > 0) continue;
+            out.add(a);
+            if (out.size() == 2) break;
+        }
+        return out;
     }
 
     private Bitmap bitmapOf(Icon icon) {

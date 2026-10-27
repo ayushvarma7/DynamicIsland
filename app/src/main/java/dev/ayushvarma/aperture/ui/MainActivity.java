@@ -132,6 +132,7 @@ public final class MainActivity extends Activity {
         demo.addView(Ui.text(this, getString(dev.ayushvarma.aperture.R.string.main_try_hint), R.style.TextAppearance_Material3_BodySmall));
         Ui.button(demo, getString(dev.ayushvarma.aperture.R.string.main_demo_notification), v -> demoMessage());
         Ui.button(demo, getString(dev.ayushvarma.aperture.R.string.main_demo_timer), v -> demoTimer());
+        Ui.button(demo, getString(dev.ayushvarma.aperture.R.string.main_demo_call), v -> demoCall());
         Ui.button(demo, getString(dev.ayushvarma.aperture.R.string.main_demo_charging), v -> demoCharging());
         Ui.button(page, getString(dev.ayushvarma.aperture.R.string.help_open),
                 v -> startActivity(new Intent(this, HelpActivity.class)));
@@ -326,6 +327,15 @@ public final class MainActivity extends Activity {
                 .title(getString(dev.ayushvarma.aperture.R.string.demo_timer)).chronometer(now + 25_000, true)
                 .payload(demoPayload()).createdAt(now).updatedAt(now).build());
         getWindow().getDecorView().postDelayed(() -> hub().remove("demo:timer"), 27_000);
+    }
+
+    /** A pretend incoming call, so people can see the call card; its buttons do nothing. */
+    private void demoCall() {
+        long now = System.currentTimeMillis();
+        hub().upsert(IslandActivity.builder("demo:call", getPackageName(), ActivityKind.INCOMING_CALL)
+                .title(getString(dev.ayushvarma.aperture.R.string.demo_caller))
+                .payload(demoPayload()).createdAt(now).updatedAt(now).build());
+        getWindow().getDecorView().postDelayed(() -> hub().remove("demo:call"), 8_000);
     }
 
     private void demoCharging() {

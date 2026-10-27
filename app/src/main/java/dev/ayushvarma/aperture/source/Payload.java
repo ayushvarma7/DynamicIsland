@@ -12,6 +12,8 @@ public final class Payload {
     public Bitmap art;
     /** Owning app's icon (or the notification's small icon). */
     public Drawable appIcon;
+    /** The app's monochrome logo mark (notification small icon), drawn tinted and without a container. */
+    public Drawable smallIcon;
     public CharSequence appName;
     /** Tap target: notification content intent or the media session's launch activity. */
     public PendingIntent open;
@@ -30,6 +32,8 @@ public final class Payload {
 
     // Notification actions
     public Notification.Action replyAction;
+    /** Up to two of the app's own buttons for Live Updates, timers and downloads (Pause, +1:00, Cancel...). */
+    public java.util.List<Notification.Action> actions;
     public PendingIntent answer;
     public PendingIntent decline;
     public PendingIntent hangUp;

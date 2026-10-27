@@ -10,6 +10,8 @@ public final class Fonts {
     private static Typeface base;
     private static Typeface regular;
     private static Typeface medium;
+    private static Typeface semibold;
+    private static Typeface bold;
 
     private Fonts() {}
 
@@ -26,6 +28,17 @@ public final class Fonts {
     public static synchronized Typeface medium() {
         if (medium == null) medium = Typeface.create(base(), 500, false);
         return medium;
+    }
+
+    /** Key values on the island (times, names, ETAs): heavier weights read at a glance. */
+    public static synchronized Typeface semibold() {
+        if (semibold == null) semibold = Typeface.create(base(), 600, false);
+        return semibold;
+    }
+
+    public static synchronized Typeface bold() {
+        if (bold == null) bold = Typeface.create(base(), 700, false);
+        return bold;
     }
 
     /** True when the Pixel font resolved; shown in the Device Report. */

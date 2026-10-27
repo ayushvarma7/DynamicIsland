@@ -66,7 +66,7 @@ public final class IslandPalette {
         return (Math.round(alpha * 255) << 24) | (color & 0x00FFFFFF);
     }
 
-    static int blend(int a, int b, float t) {
+    public static int blend(int a, int b, float t) {
         int r = Math.round(Color.red(a) + (Color.red(b) - Color.red(a)) * t);
         int g = Math.round(Color.green(a) + (Color.green(b) - Color.green(a)) * t);
         int bl = Math.round(Color.blue(a) + (Color.blue(b) - Color.blue(a)) * t);

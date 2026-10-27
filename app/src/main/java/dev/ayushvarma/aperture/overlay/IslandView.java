@@ -105,6 +105,10 @@ public final class IslandView extends View {
     private final RectF tmp = new RectF();
     private final Path clip = new Path();
     private final Matrix matrix = new Matrix();
+    private final Path wavePath = new Path();
+    /** 0 = paused (flat line, rounded-square play button), 1 = playing (squiggle, circle); eased per frame. */
+    private float wave;
+    private float playShape;
     private final List<RectF> hitRects = new ArrayList<>();
     private final List<Hit> hitActions = new ArrayList<>();
     private final GestureDetector gestures;
@@ -468,18 +472,7 @@ public final class IslandView extends View {
 
     private float cardHeight(IslandActivity a) {
         if (a == null) return g.detentSmall;
-        switch (a.kind) {
-            case MEDIA:
-                return mediaCardHeight();
-            case INCOMING_CALL:
-            case ONGOING_CALL:
-                return g.detentMedium;
-            case NOTIFICATION:
-                Payload p = payload(a);
-                return p != null && (p.replyAction != null || p.open != null) ? g.detentMedium : g.detentSmall;
-            default:
-                return a.progress >= 0 || a.chronometerBaseMs > 0 ? g.detentMedium : g.detentSmall;
-        }
+        return a.kind == ActivityKind.MEDIA ? mediaCardHeight() : contentCardHeight(a);
     }
 
     @Override
@@ -632,7 +625,7 @@ public final class IslandView extends View {
             default:
                 fill.setColor(0xFF000000);
                 c.drawRoundRect(body, r, r, fill);
-                keyline(c, r, palette.keyline);
+                keyline(c, r, a == null ? palette.keyline : IslandPalette.withAlpha(tint(a, p), 0.34f));
                 break;
         }
         c.restoreToCount(layer);
@@ -766,8 +759,8 @@ public final class IslandView extends View {
                 if (p != null && p.art != null) {
                     if (a.kind == ActivityKind.MEDIA) drawRoundBitmap(c, p.art, cx, cy, size, size * 0.28f);
                     else drawCircleBitmap(c, p.art, cx, cy, size / 2f);
-                } else if (p != null && p.appIcon != null) {
-                    drawDrawable(c, p.appIcon, cx, cy, size);
+                } else if (p != null && (p.smallIcon != null || p.appIcon != null)) {
+                    drawMark(c, p, cx, cy, size * 0.82f, tint(a, p));
                 } else {
                     fill.setColor(palette.primary);
                     c.drawCircle(cx, cy, size / 4f, fill);
@@ -780,7 +773,7 @@ public final class IslandView extends View {
         float cx = r - Math.min(r - l, hc * 0.9f) / 2f;
         switch (a.kind) {
             case MEDIA:
-                if (a.playing) drawBars(c, cx, cy, hc * 0.42f, palette.primary);
+                if (a.playing) drawBars(c, cx, cy, hc * 0.42f, tint(a, payload(a)));
                 else {
                     fill.setColor(palette.onSurfaceVariant);
                     glyphs.pause(c, cx, cy, hc * 0.4f, fill);
@@ -802,7 +795,8 @@ public final class IslandView extends View {
             default:
                 CharSequence label = trailingLabel(a);
                 if (label != null) {
-                    drawText(c, label, l, r, cy, hc * 0.36f, palette.primary, true);
+                    drawRolling(c, "compact", label, l, r, cy, hc * 0.4f, tint(a, payload(a)),
+                            dev.ayushvarma.aperture.theme.Fonts.semibold(), true);
                 } else if (a.progress >= 0) {
                     drawRing(c, cx, cy, hc * 0.26f, a.progress);
                 }
@@ -820,83 +814,410 @@ public final class IslandView extends View {
         return null;
     }
 
+    // ---- Expanded cards (Live Activity regions: leading and trailing around the camera, then the content) ----
+
+    private static final int TIMER_TINT = 0xFFFFB04D;
+    private static final int DECLINE_RED = 0xFFEB4D4B;
+
+    /**
+     * One bold color per activity, as Live Activities do: the album's color for music, green for calls, warm
+     * amber for timers, the app's own color for Live Updates. Lifted until it reads on OLED black.
+     */
+    private int tint(IslandActivity a, Payload p) {
+        int c;
+        switch (a.kind) {
+            case MEDIA:
+                c = p != null && settings.artworkAccent()
+                        ? dev.ayushvarma.aperture.theme.ArtColors.accent(p.art, palette.primary) : palette.primary;
+                break;
+            case INCOMING_CALL:
+            case ONGOING_CALL:
+                c = palette.accept;
+                break;
+            case SYSTEM:
+                c = a.id.startsWith("sys:low") ? palette.error : palette.accept;
+                break;
+            case TIMER:
+            case STOPWATCH:
+            case ALARM:
+                c = vivid(a.accentColor) ? a.accentColor : TIMER_TINT;
+                break;
+            default:
+                c = vivid(a.accentColor) ? a.accentColor : palette.primary;
+        }
+        return legible(c);
+    }
+
+    private final float[] hsv = new float[3];
+
+    private boolean vivid(int c) {
+        if (android.graphics.Color.alpha(c) < 200) return false;
+        android.graphics.Color.colorToHSV(c, hsv);
+        return hsv[1] > 0.3f && hsv[2] > 0.35f;
+    }
+
+    /** Raises a color's luminance toward white until it reads on black (about 4.5:1). */
+    private static int legible(int c) {
+        int out = c | 0xFF000000;
+        for (int i = 0; i < 6 && android.graphics.Color.luminance(out) < 0.28f; i++) {
+            out = IslandPalette.blend(out, 0xFFFFFFFF, 0.22f);
+        }
+        return out;
+    }
+
+    /** The app's logo mark: its monochrome icon in the tint, with no container; the app icon if there is none. */
+    private void drawMark(Canvas c, Payload p, float cx, float cy, float size, int color) {
+        if (p != null && p.smallIcon != null) {
+            p.smallIcon.setTint(color);
+            drawDrawable(c, p.smallIcon, cx, cy, size);
+        } else if (p != null && p.appIcon != null) {
+            drawDrawable(c, p.appIcon, cx, cy, size);
+        }
+    }
+
+    private static final class Roll {
+        String now = "";
+        String prev = "";
+        long at;
+    }
+
+    private final java.util.HashMap<String, Roll> rolls = new java.util.HashMap<>();
+
+    /**
+     * Numeric content transition: the digits that change slide up and out while the new ones rise in, the
+     * rest stay put. Tabular figures keep every digit in its column.
+     */
+    private void drawRolling(Canvas c, String slot, CharSequence value, float l, float r, float cy, float size,
+                             int color, android.graphics.Typeface tf, boolean alignRight) {
+        if (value == null || r - l <= 0) return;
+        String s = value.toString();
+        Roll st = rolls.get(slot);
+        if (st == null) {
+            st = new Roll();
+            st.now = s;
+            rolls.put(slot, st);
+        } else if (!s.equals(st.now)) {
+            st.prev = st.now;
+            st.now = s;
+            st.at = SystemClock.uptimeMillis();
+        }
+        text.setTypeface(tf);
+        text.setTextSize(Math.min(size, capSize(size)));
+        text.setFontFeatureSettings("'tnum'");
+        float w = text.measureText(s);
+        if (w > r - l) {
+            text.setFontFeatureSettings(null);
+            drawText(c, s, l, r, cy, size, color, alignRight);
+            return;
+        }
+        float x0 = alignRight ? r - w : l;
+        Paint.FontMetrics fm = text.getFontMetrics();
+        float base = cy - (fm.ascent + fm.descent) / 2f;
+        float k = clamp01((SystemClock.uptimeMillis() - st.at) / 280f);
+        float e = 1f - (1f - k) * (1f - k) * (1f - k);
+        int alpha = android.graphics.Color.alpha(color);
+        if (k >= 1f || st.prev.isEmpty()) {
+            text.setColor(color);
+            c.drawText(s, x0, base, text);
+        } else {
+            float shift = text.getTextSize() * 0.62f;
+            c.save();
+            c.clipRect(x0 - dp(2), cy - text.getTextSize() * 0.62f, x0 + w + dp(2), cy + text.getTextSize() * 0.62f);
+            boolean sameShape = st.prev.length() == s.length();
+            for (int i = 0; i < s.length(); i++) {
+                float x = x0 + text.measureText(s, 0, i);
+                char now = s.charAt(i);
+                char old = sameShape ? st.prev.charAt(i) : 0;
+                String ch = String.valueOf(now);
+                if (sameShape && old == now) {
+                    text.setColor(color);
+                    c.drawText(ch, x, base, text);
+                    continue;
+                }
+                if (old != 0) {
+                    text.setColor(IslandPalette.withAlpha(color, (alpha / 255f) * (1f - e)));
+                    c.drawText(String.valueOf(old), x, base - shift * e, text);
+                }
+                text.setColor(IslandPalette.withAlpha(color, (alpha / 255f) * e));
+                c.drawText(ch, x, base + shift * (1f - e), text);
+            }
+            c.restore();
+            postInvalidateOnAnimation();
+        }
+        text.setFontFeatureSettings(null);
+    }
+
+    /** Material tonal button: the tint at low opacity behind tint-colored text, fully rounded. */
+    private void tonalButton(Canvas c, float l, float t, float r, float b, int tint, CharSequence label, Runnable action) {
+        tmp.set(l, t, r, b);
+        fill.setColor(IslandPalette.withAlpha(tint, 0.2f));
+        c.drawRoundRect(tmp, tmp.height() / 2, tmp.height() / 2, fill);
+        addHit(tmp, action);
+        text.setTypeface(dev.ayushvarma.aperture.theme.Fonts.semibold());
+        drawLabel(c, label, l + dp(12), r - dp(12), (t + b) / 2f, dp(14), tint);
+    }
+
+    private void drawLabel(Canvas c, CharSequence s, float l, float r, float cy, float size, int color) {
+        if (s == null || r - l <= 0) return;
+        text.setTextSize(Math.min(size, capSize(size)));
+        text.setColor(color);
+        CharSequence e = TextUtils.ellipsize(s, text, r - l, TextUtils.TruncateAt.END);
+        float w = text.measureText(e, 0, e.length());
+        Paint.FontMetrics fm = text.getFontMetrics();
+        c.drawText(e, 0, e.length(), (l + r - w) / 2f, cy - (fm.ascent + fm.descent) / 2f, text);
+    }
+
+    /** Round call button with a white phone glyph (rotated for hang up / decline). */
+    private void circleButton(Canvas c, float cx, float cy, float rad, int color, boolean hangUp, float scale, Runnable action) {
+        fill.setColor(color);
+        c.drawCircle(cx, cy, rad * scale, fill);
+        fill.setColor(0xFFFFFFFF);
+        glyphs.phone(c, cx, cy, rad * 1.05f, fill, hangUp);
+        tmp.set(cx - rad - dp(4), cy - rad - dp(4), cx + rad + dp(4), cy + rad + dp(4));
+        addHit(tmp, action);
+    }
+
+    /** Draws up to {@code maxLines} wrapped lines from the top; returns the bottom. */
+    private float drawLines(Canvas c, CharSequence s, float l, float r, float top, float size, int color,
+                            android.graphics.Typeface tf, int maxLines) {
+        if (s == null || r - l <= 0) return top;
+        text.setTypeface(tf);
+        text.setTextSize(size);
+        text.setColor(color);
+        Paint.FontMetrics fm = text.getFontMetrics();
+        float lineH = (fm.descent - fm.ascent) * 1.05f;
+        String rest = s.toString().replace('\n', ' ');
+        float y = top;
+        for (int line = 0; line < maxLines && !rest.isEmpty(); line++) {
+            boolean last = line == maxLines - 1;
+            int n = text.breakText(rest, true, r - l, null);
+            String part;
+            if (last || n >= rest.length()) {
+                part = TextUtils.ellipsize(rest, text, r - l, TextUtils.TruncateAt.END).toString();
+                rest = "";
+            } else {
+                int sp = rest.lastIndexOf(' ', n);
+                if (sp <= 0) sp = n;
+                part = rest.substring(0, sp);
+                rest = rest.substring(sp).trim();
+            }
+            c.drawText(part, l, y - fm.ascent, text);
+            y += lineH;
+        }
+        return y;
+    }
+
+    /** Height of each non-media card: only the space its content needs (HIG: dynamic height). */
+    private float contentCardHeight(IslandActivity a) {
+        Payload p = payload(a);
+        float band = g.compactHeight;
+        float pad = dp(18);
+        float h;
+        switch (a.kind) {
+            case INCOMING_CALL:
+            case ONGOING_CALL:
+                h = band + dp(6) + dp(60) + pad;
+                break;
+            case NOTIFICATION:
+                boolean buttons = p != null && (p.replyAction != null || p.open != null);
+                h = band + dp(4) + dp(66) + (buttons ? dp(10) + dp(40) : 0) + pad;
+                break;
+            case TIMER:
+            case STOPWATCH:
+            case ALARM:
+                h = band + dp(2) + dp(20) + dp(60) + pad;
+                break;
+            default:
+                boolean hasActions = p != null && p.actions != null && !p.actions.isEmpty();
+                h = band + dp(4) + dp(26) + (a.text != null ? dp(20) : 0)
+                        + (a.progress >= 0 ? dp(26) : 0) + (a.chronometerBaseMs > 0 && a.progress < 0 ? dp(52) : 0)
+                        + (hasActions ? dp(12) + dp(40) : 0) + pad;
+        }
+        return Math.min(h, g.windowHeight - g.expandedTop - dp(4));
+    }
+
     private void drawCard(Canvas c, IslandActivity a) {
         Payload p = payload(a);
         if (a.kind == ActivityKind.MEDIA) {
             drawMediaCard(c, a, p);
             return;
         }
-        float pad = g.innerPadding;
-        float hc = g.compactHeight;
-        float rowTop = body.top;
-        float icon = hc - 2 * g.gap;
-        float leadCx = body.left + pad + icon / 2f;
-        drawLeading(c, a, leadCx, rowTop + hc / 2f, icon);
-        // Trailing slot keeps the compact content in place (Section 3.2 rule 3: same info, same place).
-        float trailStart = g.centerX + g.keepOutRadius;
-        if (a.kind != ActivityKind.NOTIFICATION) drawTrailing(c, a, trailStart, body.right - pad, rowTop + hc / 2f, hc);
+        int tint = tint(a, p);
+        float pad = dp(18);
+        float l = body.left + pad;
+        float r = body.right - pad;
+        float band = g.compactHeight;
+        float bandCy = body.top + band / 2f;
+        float leadEnd = g.centerX - g.keepOutRadius - dp(6);
+        float trailStart = g.centerX + g.keepOutRadius + dp(6);
+        boolean call = a.kind == ActivityKind.INCOMING_CALL || a.kind == ActivityKind.ONGOING_CALL;
 
-        float textLeft = body.left + pad;
-        float textRight = body.right - pad;
-        float y = rowTop + hc + dp(10);
-        if (a.kind == ActivityKind.NOTIFICATION && p != null && p.appName != null) {
-            drawTextTop(c, p.appName, textLeft + icon + dp(10), g.centerX - g.keepOutRadius - dp(4), rowTop + hc / 2f
-                    - dp(8), dp(12), palette.onSurfaceVariant, false);
+        // Leading region (left of the camera): the logo mark and the app's name.
+        float mark = dp(18);
+        if (call && (p == null || p.smallIcon == null)) {
+            fill.setColor(tint);
+            glyphs.phone(c, l + mark / 2f, bandCy, mark * 0.9f, fill, false);
+        } else {
+            drawMark(c, p, l + mark / 2f, bandCy, mark, tint);
         }
-        CharSequence title = a.title;
-        if (a.kind == ActivityKind.INCOMING_CALL && title == null) title = getContext().getString(R.string.island_incoming_call);
-        y = drawTextTop(c, title, textLeft, textRight, y, dp(17), palette.onSurface, true) + dp(4);
-        CharSequence sub = a.text;
-        if ((a.kind == ActivityKind.INCOMING_CALL || a.kind == ActivityKind.ONGOING_CALL) && p != null && p.appName != null) {
-            sub = a.kind == ActivityKind.INCOMING_CALL
-                    ? getContext().getString(R.string.island_call_from, p.appName) : p.appName;
+        if (p != null && p.appName != null) {
+            text.setTypeface(dev.ayushvarma.aperture.theme.Fonts.medium());
+            drawTextTop(c, p.appName, l + mark + dp(8), leadEnd, bandCy - dp(8), dp(13), palette.onSurfaceVariant, true);
         }
-        if (sub != null) y = drawTextTop(c, sub, textLeft, textRight, y, dp(14), palette.onSurfaceVariant, false) + dp(6);
+        // Trailing region (right of the camera): the same value the pill showed, in the same place.
+        CharSequence value = a.kind == ActivityKind.TIMER || a.kind == ActivityKind.STOPWATCH || call ? null : trailingLabel(a);
+        if (value != null) drawRolling(c, "card-band", value, trailStart, r, bandCy, dp(15), tint,
+                dev.ayushvarma.aperture.theme.Fonts.semibold(), true);
 
-        float bottom = body.bottom - pad;
-        float buttonH = dp(44);
+        float top = body.top + band;
         switch (a.kind) {
             case INCOMING_CALL:
+            case ONGOING_CALL: {
+                float av = dp(56);
+                float cy = top + dp(6) + av / 2f;
+                if (p != null && p.art != null) {
+                    drawCircleBitmap(c, p.art, l + av / 2f, cy, av / 2f);
+                } else {
+                    fill.setColor(IslandPalette.withAlpha(tint, 0.22f));
+                    c.drawCircle(l + av / 2f, cy, av / 2f, fill);
+                    CharSequence who = a.title == null ? "?" : a.title.subSequence(0, Math.min(1, a.title.length()));
+                    text.setTypeface(dev.ayushvarma.aperture.theme.Fonts.semibold());
+                    drawLabel(c, who.toString().toUpperCase(java.util.Locale.ROOT), l, l + av, cy, dp(24), tint);
+                }
+                boolean incoming = a.kind == ActivityKind.INCOMING_CALL;
+                float buttonsW = incoming ? dp(52) * 2 + dp(14) : dp(52);
+                float textL = l + av + dp(14);
+                float textR = r - buttonsW - dp(12);
+                CharSequence name = a.title != null ? a.title : getContext().getString(R.string.island_incoming_call);
+                text.setTypeface(dev.ayushvarma.aperture.theme.Fonts.semibold());
+                drawLines(c, name, textL, textR, cy - dp(24), dp(21), palette.onSurface,
+                        dev.ayushvarma.aperture.theme.Fonts.semibold(), 1);
+                if (incoming) {
+                    CharSequence sub = p != null && p.appName != null
+                            ? getContext().getString(R.string.island_call_from, p.appName)
+                            : getContext().getString(R.string.island_incoming_call);
+                    drawLines(c, sub, textL, textR, cy + dp(3), dp(14), palette.onSurfaceVariant,
+                            dev.ayushvarma.aperture.theme.Fonts.regular(), 1);
+                } else if (a.chronometerBaseMs > 0) {
+                    drawRolling(c, "call-time", TimeText.clock(System.currentTimeMillis() - a.chronometerBaseMs),
+                            textL, textR, cy + dp(12), dp(16), tint, dev.ayushvarma.aperture.theme.Fonts.semibold(), false);
+                }
+                float br = dp(26);
                 if (p != null) {
-                    float mid = (textLeft + textRight) / 2f;
-                    button(c, textLeft, bottom - buttonH, mid - dp(6), bottom, palette.error, null, 2,
-                            () -> { actions.send(p.decline); host.setExpanded(false); });
-                    button(c, mid + dp(6), bottom - buttonH, textRight, bottom, palette.accept, null, 1,
-                            () -> actions.send(p.answer));
+                    if (incoming) {
+                        float pulse = 1f + 0.06f * (float) Math.sin(SystemClock.uptimeMillis() / 160.0);
+                        circleButton(c, r - br, cy, br, palette.accept, false, pulse, () -> actions.send(p.answer));
+                        circleButton(c, r - br * 3 - dp(14), cy, br, DECLINE_RED, true, 1f,
+                                () -> { actions.send(p.decline); host.setExpanded(false); });
+                        postInvalidateOnAnimation();
+                    } else if (p.hangUp != null) {
+                        circleButton(c, r - br, cy, br, DECLINE_RED, true, 1f, () -> actions.send(p.hangUp));
+                    }
                 }
                 break;
-            case ONGOING_CALL:
-                if (p != null && p.hangUp != null) {
-                    float w = dp(120);
-                    button(c, textRight - w, bottom - buttonH, textRight, bottom, palette.error, null, 2,
-                            () -> actions.send(p.hangUp));
+            }
+            case NOTIFICATION: {
+                float av = dp(40);
+                float y0 = top + dp(4);
+                float textL = l;
+                if (p != null && p.art != null) {
+                    drawCircleBitmap(c, p.art, l + av / 2f, y0 + av / 2f, av / 2f);
+                    textL = l + av + dp(12);
                 }
-                break;
-            case NOTIFICATION:
+                float y = drawLines(c, a.title, textL, r, y0, dp(16), palette.onSurface,
+                        dev.ayushvarma.aperture.theme.Fonts.semibold(), 1);
+                drawLines(c, a.text, textL, r, y + dp(1), dp(14), palette.onSurfaceVariant,
+                        dev.ayushvarma.aperture.theme.Fonts.regular(), 2);
                 if (p != null) {
-                    float x = textRight;
+                    float bh = dp(40);
+                    float bottom = body.bottom - pad;
+                    float x = r;
                     if (p.open != null) {
-                        float w = dp(96);
-                        button(c, x - w, bottom - buttonH, x, bottom, palette.buttonSecondary,
-                                getContext().getString(R.string.island_open), 0, () -> open(a));
+                        float w = dp(92);
+                        tonalButton(c, x - w, bottom - bh, x, bottom, palette.onSurface,
+                                getContext().getString(R.string.island_open), () -> open(a));
                         x -= w + dp(8);
                     }
                     if (p.replyAction != null) {
-                        float w = dp(96);
-                        button(c, x - w, bottom - buttonH, x, bottom, palette.primaryContainer,
-                                getContext().getString(R.string.island_reply), 0, () -> host.reply(a));
+                        float w = dp(92);
+                        tonalButton(c, x - w, bottom - bh, x, bottom, tint,
+                                getContext().getString(R.string.island_reply), () -> host.reply(a));
                     }
                 }
                 break;
-            default:
-                if (a.chronometerBaseMs > 0) {
-                    // Timers and stopwatches: the time is the content, so make it the largest thing on the card.
-                    CharSequence time = trailingLabel(a);
-                    drawText(c, time, textLeft, textRight, bottom - dp(24), dp(40), palette.primary, false);
+            }
+            case TIMER:
+            case STOPWATCH:
+            case ALARM: {
+                // The time is the content: the largest, heaviest thing on the card, with the app's own buttons.
+                float y = drawLines(c, a.title != null ? a.title : p != null ? p.appName : null, l, r, top + dp(2),
+                        dp(15), palette.onSurfaceVariant, dev.ayushvarma.aperture.theme.Fonts.medium(), 1);
+                float timeCy = y + dp(30);
+                float buttonsL = r;
+                if (p != null && p.actions != null) {
+                    for (int i = p.actions.size() - 1; i >= 0; i--) {
+                        android.app.Notification.Action act = p.actions.get(i);
+                        float w = Math.max(dp(76), Math.min(dp(160), textWidth(act.title, dp(14)) + dp(28)));
+                        tonalButton(c, buttonsL - w, timeCy - dp(20), buttonsL, timeCy + dp(20), tint, act.title,
+                                () -> actions.send(act.actionIntent));
+                        buttonsL -= w + dp(8);
+                    }
                 }
-                if (a.progress >= 0) drawBar(c, textLeft, textRight, bottom - dp(6), a.progress);
+                CharSequence time = trailingLabel(a);
+                if (time != null) {
+                    drawRolling(c, "card-time", time, l, buttonsL - dp(8), timeCy, dp(50), tint,
+                            dev.ayushvarma.aperture.theme.Fonts.bold(), false);
+                }
                 break;
+            }
+            default: {
+                // Live Updates (deliveries, rides), downloads: title, detail, a thick rounded progress track.
+                float y = drawLines(c, a.title, l, r, top + dp(4), dp(19), palette.onSurface,
+                        dev.ayushvarma.aperture.theme.Fonts.semibold(), 1);
+                if (a.text != null) y = drawLines(c, a.text, l, r, y + dp(1), dp(14), palette.onSurfaceVariant,
+                        dev.ayushvarma.aperture.theme.Fonts.regular(), 1);
+                if (a.chronometerBaseMs > 0 && a.progress < 0) {
+                    drawRolling(c, "card-time", trailingLabel(a), l, r, y + dp(26), dp(40), tint,
+                            dev.ayushvarma.aperture.theme.Fonts.bold(), false);
+                    y += dp(52);
+                }
+                if (a.progress >= 0) {
+                    float cy = y + dp(14);
+                    float h = dp(8);
+                    tmp.set(l, cy - h / 2, r, cy + h / 2);
+                    fill.setColor(IslandPalette.withAlpha(tint, 0.22f));
+                    c.drawRoundRect(tmp, h / 2, h / 2, fill);
+                    float x = l + (r - l) * clamp01(a.progress);
+                    tmp.set(l, cy - h / 2, Math.max(l + h, x), cy + h / 2);
+                    fill.setColor(tint);
+                    c.drawRoundRect(tmp, h / 2, h / 2, fill);
+                    fill.setColor(0xFFFFFFFF);
+                    c.drawCircle(Math.max(l + h / 2, x - h / 2), cy, dp(7), fill);
+                    fill.setColor(tint);
+                    c.drawCircle(Math.max(l + h / 2, x - h / 2), cy, dp(4), fill);
+                    y = cy + dp(12);
+                }
+                if (p != null && p.actions != null && !p.actions.isEmpty()) {
+                    float bottom = body.bottom - pad;
+                    float x = r;
+                    for (int i = p.actions.size() - 1; i >= 0; i--) {
+                        android.app.Notification.Action act = p.actions.get(i);
+                        float w = Math.max(dp(84), Math.min(dp(140), textWidth(act.title, dp(14)) + dp(28)));
+                        tonalButton(c, x - w, bottom - dp(40), x, bottom, tint, act.title,
+                                () -> actions.send(act.actionIntent));
+                        x -= w + dp(8);
+                    }
+                }
+                break;
+            }
         }
+    }
+
+    private float textWidth(CharSequence s, float size) {
+        if (s == null) return 0;
+        text.setTypeface(dev.ayushvarma.aperture.theme.Fonts.semibold());
+        text.setTextSize(size);
+        return text.measureText(s, 0, s.length());
     }
 
     /**
@@ -908,8 +1229,9 @@ public final class IslandView extends View {
         float pad = dp(20);
         float l = body.left + pad;
         float r = body.right - pad;
-        int accent = settings.artworkAccent() ? dev.ayushvarma.aperture.theme.ArtColors.accent(p.art, palette.primary)
-                : palette.primary;
+        int accent = tint(a, p);
+        // Concentric corners: inner shapes use the card's radius minus the margin between them.
+        float inner = Math.max(dp(10), Math.min(radius.getValue(), g.expandedCorner) - pad);
 
         // Camera band: which app, left of the camera; live bars right of it (same place as the pill).
         float band = g.compactHeight;
@@ -927,16 +1249,18 @@ public final class IslandView extends View {
         float artTop = body.top + band + dp(10);
         float artCy = artTop + art / 2f;
         if (p.art != null) {
-            drawRoundBitmap(c, p.art, l + art / 2f, artCy, art, dp(14));
+            drawRoundBitmap(c, p.art, l + art / 2f, artCy, art, inner);
         } else {
             tmp.set(l, artTop, l + art, artTop + art);
             fill.setColor(0x33FFFFFF);
-            c.drawRoundRect(tmp, dp(14), dp(14), fill);
+            c.drawRoundRect(tmp, inner, inner, fill);
             if (p.appIcon != null) drawDrawable(c, p.appIcon, l + art / 2f, artCy, art * 0.45f);
         }
         float textL = l + art + dp(16);
-        float titleBottom = drawTextTop(c, a.title, textL, r, artCy - dp(24), dp(20), 0xFFFFFFFF, true);
-        drawTextTop(c, a.text, textL, r, titleBottom + dp(2), dp(15), 0xB3FFFFFF, false);
+        float titleBottom = drawLines(c, a.title, textL, r, artCy - dp(25), dp(20), 0xFFFFFFFF,
+                dev.ayushvarma.aperture.theme.Fonts.semibold(), 1);
+        drawLines(c, a.text, textL, r, titleBottom + dp(1), dp(15), 0xB3FFFFFF,
+                dev.ayushvarma.aperture.theme.Fonts.regular(), 1);
 
         // Progress: 6 dp track, accent fill, position dot, times tight underneath. Hidden without a duration.
         long pos = PlaybackMath.position(p.positionMs, p.positionUpdateElapsedMs, p.speed, a.playing,
@@ -946,15 +1270,31 @@ public final class IslandView extends View {
         MediaController mc = p.controller;
         scrubController = null;
         if (fraction >= 0) {
-            float h = dp(6);
-            tmp.set(l, barY - h / 2, r, barY + h / 2);
-            fill.setColor(0x33FFFFFF);
-            c.drawRoundRect(tmp, h / 2, h / 2, fill);
+            // Android's media progress: a squiggle that flows while playing and flattens when paused.
             float x = l + (r - l) * fraction;
-            tmp.right = Math.max(l + h, x);
+            stroke.setStrokeCap(Paint.Cap.ROUND);
+            stroke.setStrokeWidth(dp(3));
+            stroke.setColor(0x33FFFFFF);
+            if (x + dp(8) < r) c.drawLine(x + dp(8), barY, r, barY, stroke);
+            wave += ((a.playing ? 1f : 0f) - wave) * 0.12f;
+            if (Math.abs((a.playing ? 1f : 0f) - wave) > 0.01f) postInvalidateOnAnimation();
+            float amp = dp(3) * wave;
+            float len = dp(22);
+            float phase = (SystemClock.uptimeMillis() % 2000) / 2000f * len;
+            wavePath.reset();
+            wavePath.moveTo(l, barY);
+            for (float px = l; px <= x - dp(6); px += dp(2)) {
+                float y = barY + amp * (float) Math.sin(2 * Math.PI * (px - l + phase) / len);
+                wavePath.lineTo(px, y);
+            }
+            stroke.setColor(accent);
+            stroke.setStrokeWidth(dp(4));
+            c.drawPath(wavePath, stroke);
+            stroke.setStrokeCap(Paint.Cap.BUTT);
+            // Material 3 Expressive slider thumb: a slim vertical bar.
+            tmp.set(x - dp(2.5f), barY - dp(10), x + dp(2.5f), barY + dp(10));
             fill.setColor(accent);
-            c.drawRoundRect(tmp, h / 2, h / 2, fill);
-            c.drawCircle(x, barY, dp(6), fill);
+            c.drawRoundRect(tmp, dp(2.5f), dp(2.5f), fill);
             float timeY = barY + dp(16);
             drawText(c, TimeText.clock(pos), l, r, timeY, dp(12), 0x99FFFFFF, false);
             drawText(c, "-" + TimeText.clock(p.durationMs - pos), l, r, timeY, dp(12), 0x99FFFFFF, true);
@@ -976,8 +1316,15 @@ public final class IslandView extends View {
         glyphs.next(c, mid - step, cy, glyph, fill, false);
         tmp.set(mid - step - hit / 2, cy - hit / 2, mid - step + hit / 2, cy + hit / 2);
         addHit(tmp, tc == null ? null : tc::skipToPrevious);
+        // Expressive shape morph: a rounded square while paused, a circle while playing.
+        float target = a.playing ? 1f : 0f;
+        playShape += (target - playShape) * 0.2f;
+        if (Math.abs(target - playShape) > 0.01f) postInvalidateOnAnimation();
+        float half = dp(28);
+        float corner = dp(16) + (half - dp(16)) * playShape;
+        tmp.set(mid - half, cy - half, mid + half, cy + half);
         fill.setColor(accent);
-        c.drawCircle(mid, cy, dp(28), fill);
+        c.drawRoundRect(tmp, corner, corner, fill);
         fill.setColor(dev.ayushvarma.aperture.theme.ArtColors.onAccent(accent));
         if (a.playing) glyphs.pause(c, mid, cy, dp(24), fill);
         else glyphs.play(c, mid + dp(2), cy, dp(26), fill);
@@ -1036,10 +1383,15 @@ public final class IslandView extends View {
             fill.setAlpha(255);
             c.drawCircle(cx, cy, rr, fill);
             // Minimal shows live data when there is any (Section 3.2 rule 5), else the app icon.
-            if (m.progress >= 0) {
+            if (m.chronometerBaseMs > 0 && m.countDown) {
+                long left = Math.max(0, m.chronometerBaseMs - System.currentTimeMillis());
+                String v = left >= 60_000 ? (left / 60_000) + "m" : (left / 1000) + "s";
+                drawRolling(c, "bubble" + i, v, cx - rr, cx + rr, cy, rr * 0.72f, tint(m, payload(m)),
+                        dev.ayushvarma.aperture.theme.Fonts.bold(), false);
+            } else if (m.progress >= 0) {
                 drawRing(c, cx, cy, rr * 0.6f, m.progress);
             } else if (m.kind == ActivityKind.MEDIA && m.playing) {
-                drawBars(c, cx, cy, rr * 0.9f, palette.primary);
+                drawBars(c, cx, cy, rr * 0.9f, tint(m, payload(m)));
             } else {
                 drawLeading(c, m, cx, cy, rr * 1.3f);
             }
