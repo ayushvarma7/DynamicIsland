@@ -501,11 +501,6 @@ public final class IslandView extends View {
         }
         float slop = 6 * getResources().getDisplayMetrics().density;
         tmp.set(body);
-        if (bubbleScale.getValue() > 0.01f) {
-            float extent = g.bubbleGap + g.compactHeight;
-            tmp.left -= bubbles.size() > 1 ? extent : 0;
-            tmp.right += extent;
-        }
         tmp.inset(-slop, -slop);
         tmp.top = Math.max(0, tmp.top);
         if (regionApplied && Math.abs(tmp.left - lastRegion.left) + Math.abs(tmp.right - lastRegion.right)
@@ -546,7 +541,6 @@ public final class IslandView extends View {
                 c.drawRoundRect(body, r, r, fill);
             }
         }
-        drawBubbles(c);
         if (settings.calibrationPreview()) {
             stroke.setColor(palette.primary);
             stroke.setStrokeWidth(dp(1));
@@ -572,6 +566,7 @@ public final class IslandView extends View {
             long minute = System.currentTimeMillis() / 60_000L;
             c.translate((minute % 3) - 1, ((minute / 3) % 3) - 1);
             drawCompact(c, content.activity);
+            drawBadges(c);
         }
         c.restoreToCount(save);
         scheduleTicks(content.activity, card);
@@ -1370,33 +1365,45 @@ public final class IslandView extends View {
         hitActions.add(action == null ? () -> { } : action::run);
     }
 
-    private void drawBubbles(Canvas c) {
-        float s = bubbleScale.getValue();
+    /**
+     * Other live activities, shown as small badges on the pill's leading icon (like stacked avatars) instead of
+     * detached circles: a circle beside the pill would cover status bar icons such as signal and 5G, and the
+     * status bar should stay readable. Swiping the pill still switches between them.
+     */
+    private void drawBadges(Canvas c) {
+        float s = clamp01(bubbleScale.getValue());
         if (s < 0.01f || bubbles.isEmpty()) return;
         float hc = g.compactHeight;
-        for (int i = 0; i < bubbles.size(); i++) {
+        float cy = body.centerY();
+        float icon = hc - 2 * g.gap - dp(4);
+        float leadEnd = g.centerX - g.keepOutRadius;
+        float trailStart = g.centerX + g.keepOutRadius;
+        boolean leadingRoom = leadEnd - body.left >= icon + dp(4);
+        float iconCx = leadingRoom ? body.left + g.gap + dp(2) + icon / 2f : trailStart + icon / 2f;
+        float rr = icon * 0.3f * s;
+        for (int i = 0; i < Math.min(2, bubbles.size()); i++) {
             IslandActivity m = bubbles.get(i);
-            float cx = i == 0 ? body.right + g.bubbleGap + hc / 2f : body.left - g.bubbleGap - hc / 2f;
-            float cy = body.centerY();
-            float rr = hc / 2f * clamp01(s);
+            float bx = iconCx + icon * 0.38f;
+            float by = i == 0 ? cy + icon * 0.3f : cy - icon * 0.3f;
+            // A black ring separates the badge from the icon underneath.
             fill.setColor(palette.body);
             fill.setAlpha(255);
-            c.drawCircle(cx, cy, rr, fill);
-            // Minimal shows live data when there is any (Section 3.2 rule 5), else the app icon.
-            if (m.chronometerBaseMs > 0 && m.countDown) {
-                long left = Math.max(0, m.chronometerBaseMs - System.currentTimeMillis());
-                String v = left >= 60_000 ? (left / 60_000) + "m" : (left / 1000) + "s";
-                drawRolling(c, "bubble" + i, v, cx - rr, cx + rr, cy, rr * 0.72f, tint(m, payload(m)),
-                        dev.ayushvarma.aperture.theme.Fonts.bold(), false);
-            } else if (m.progress >= 0) {
-                drawRing(c, cx, cy, rr * 0.6f, m.progress);
-            } else if (m.kind == ActivityKind.MEDIA && m.playing) {
-                drawBars(c, cx, cy, rr * 0.9f, tint(m, payload(m)));
+            c.drawCircle(bx, by, rr + dp(1.5f), fill);
+            Payload mp = payload(m);
+            if (mp != null && mp.art != null) {
+                drawCircleBitmap(c, mp.art, bx, by, rr);
             } else {
-                drawLeading(c, m, cx, cy, rr * 1.3f);
+                fill.setColor(tint(m, mp));
+                c.drawCircle(bx, by, rr, fill);
+                // The app's mark in black on its tint, so the badge says what it is (an hourglass for a timer).
+                if (m.kind == ActivityKind.INCOMING_CALL || m.kind == ActivityKind.ONGOING_CALL) {
+                    fill.setColor(0xFF000000);
+                    glyphs.phone(c, bx, by, rr * 1.2f, fill, false);
+                } else if (mp != null && mp.smallIcon != null) {
+                    mp.smallIcon.setTint(0xFF000000);
+                    drawDrawable(c, mp.smallIcon, bx, by, rr * 1.35f);
+                }
             }
-            tmp.set(cx - rr, cy - rr, cx + rr, cy + rr);
-            addHit(tmp, () -> open(m));
         }
     }
 
