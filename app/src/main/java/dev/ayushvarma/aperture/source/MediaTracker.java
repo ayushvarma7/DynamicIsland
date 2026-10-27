@@ -13,6 +13,7 @@ import android.media.session.PlaybackState;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 
 import androidx.core.content.res.ResourcesCompat;
 
@@ -44,6 +45,12 @@ final class MediaTracker {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final Map<String, Tracked> tracked = new HashMap<>();
+    /**
+     * When each app's music was paused (elapsed realtime), kept outside {@link Tracked} so it survives an app
+     * re-registering its session. Players keep re-sending their paused state and metadata for hours; without a
+     * fixed pause time each of those would bring a long-paused song back onto the island.
+     */
+    private final Map<String, Long> pausedSince = new HashMap<>();
     private final MediaSessionManager.OnActiveSessionsChangedListener sessionsListener = this::onSessions;
 
     private final class Tracked extends MediaController.Callback {
@@ -144,6 +151,28 @@ final class MediaTracker {
         }
         boolean playing = st == PlaybackState.STATE_PLAYING || st == PlaybackState.STATE_BUFFERING
                 || st == PlaybackState.STATE_FAST_FORWARDING || st == PlaybackState.STATE_REWINDING;
+        String pkg = c.getPackageName();
+        long pausedForMs = 0;
+        if (playing) {
+            pausedSince.remove(pkg);
+        } else {
+            Long since = pausedSince.get(pkg);
+            if (since == null) {
+                // First time we see it paused (or a session found after a restart): the player's last position
+                // update is when playback stopped, so an old pause is recognised as old.
+                long last = ps.getLastPositionUpdateTime();
+                long nowElapsed = SystemClock.elapsedRealtime();
+                since = last > 0 && last <= nowElapsed ? last : nowElapsed;
+                pausedSince.put(pkg, since);
+            }
+            pausedForMs = SystemClock.elapsedRealtime() - since;
+            if (pausedForMs >= PAUSED_TTL_MS) {
+                // Paused long enough: off the island until it plays again, however often the app re-sends it.
+                main.removeCallbacks(t.expire);
+                hub.remove(t.id);
+                return;
+            }
+        }
         CharSequence artist = first(md, MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE, MediaMetadata.METADATA_KEY_ARTIST,
                 MediaMetadata.METADATA_KEY_ALBUM_ARTIST, MediaMetadata.METADATA_KEY_ALBUM);
         loadArt(t, md);
@@ -170,7 +199,7 @@ final class MediaTracker {
                 .title(title).text(artist).playing(playing).payload(p)
                 .createdAt(prev == null ? now : prev.createdAt).updatedAt(now).build());
         main.removeCallbacks(t.expire);
-        if (!playing) main.postDelayed(t.expire, PAUSED_TTL_MS);
+        if (!playing) main.postDelayed(t.expire, PAUSED_TTL_MS - pausedForMs);
     }
 
     /** Bitmap art first (Spotify, YouTube Music publish one); otherwise load the URI off the main thread. */

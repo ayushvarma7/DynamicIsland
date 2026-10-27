@@ -214,9 +214,17 @@ public final class IslandView extends View {
             return;
         }
         if (!c.id.equals(glanceId) || c.contentHash() != glanceHash) {
+            // Paused music never pops up on its own. Pausing the song on the island still glances (same id),
+            // but a paused song turning up again (an app re-sending its session, leaving its player) stays quiet.
+            boolean quiet = c.kind == ActivityKind.MEDIA && !c.playing && !c.id.equals(glanceId);
             glanceId = c.id;
             glanceHash = c.contentHash();
-            wake();
+            if (quiet) {
+                removeCallbacks(toHalo);
+                haloed = true; // straight to the resting ring, which shows nothing for paused music
+            } else {
+                wake();
+            }
         }
     }
 
